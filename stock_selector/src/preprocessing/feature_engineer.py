@@ -187,18 +187,31 @@ class FeatureEngineer:
     
     def _clean_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """清理特徵數據"""
-        # 移除包含NaN的行
-        df = df.dropna()
+        logger.info(f"清理前數據量: {len(df)}")
         
         # 移除無效的股票代碼
+        df['stock_code'] = df['stock_code'].astype(str)
         df = df[df['stock_code'].str.len() == 4]
+        logger.info(f"移除無效股票代碼後: {len(df)}")
         
-        # 移除極端值
+        # 只移除關鍵特徵為NaN的行，其他用0填充
+        key_features = ['MA_3', 'MA_5', 'MA_diff', 'RSI', 'MACD_DIF']
+        df = df.dropna(subset=key_features, how='all')  # 只要不是所有關鍵特徵都是NaN就保留
+        logger.info(f"移除關鍵特徵全為NaN後: {len(df)}")
+        
+        # 用前向填充和0填充處理其他NaN
+        df = df.fillna(method='ffill').fillna(0)
+        logger.info(f"填充NaN後: {len(df)}")
+        
+        # 移除極端值（更寬鬆的處理）
         numeric_columns = df.select_dtypes(include=[np.number]).columns
         for col in numeric_columns:
             if col not in ['label_1w', 'label_1m', 'future_return_1w', 'future_return_1m']:
-                df[col] = df[col].clip(lower=df[col].quantile(0.01), upper=df[col].quantile(0.99))
+                # 只移除極端異常值，保留更多數據
+                q01, q99 = df[col].quantile([0.005, 0.995])
+                df[col] = df[col].clip(lower=q01, upper=q99)
         
+        logger.info(f"最終清理後數據量: {len(df)}")
         return df
     
     def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
@@ -272,4 +285,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

@@ -48,16 +48,21 @@ class PriceFetcher:
             # 使用 twstock 獲取數據
             stock = twstock.Stock(stock_code)
             
-            # 獲取歷史數據
-            df = stock.fetch(days)
+            # 獲取歷史數據 - 修復 twstock API 調用
+            import datetime
+            end_date = datetime.datetime.now()
+            start_date = end_date - datetime.timedelta(days=days)
             
-            if df is None or df.empty:
+            # 使用新的 API 調用方式
+            data_list = stock.fetch(start_date.year, start_date.month)
+            
+            if data_list is None or len(data_list) == 0:
                 logger.warning(f"無法獲取股票 {stock_code} 的數據")
                 return pd.DataFrame()
             
             # 轉換為 DataFrame
             data = []
-            for item in df:
+            for item in data_list:
                 data.append({
                     'date': item.date,
                     'open': item.open,
@@ -254,4 +259,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
 

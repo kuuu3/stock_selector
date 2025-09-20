@@ -93,10 +93,16 @@ class ModelTrainer:
         Returns:
             包含訓練和測試數據的字典
         """
+        # 確保數據類型正確
+        X = np.asarray(features, dtype=np.float64)
+        labels = np.asarray(labels, dtype=np.float64)
+        
         # 分離特徵和標籤
-        X = features
         y_classification = labels[:, 0]  # 分類標籤 (label_1w)
-        y_regression = labels[:, 2]      # 回歸標籤 (future_return_1w)
+        y_regression = labels[:, 2] if labels.shape[1] > 2 else labels[:, 0]  # 回歸標籤
+        
+        # 將分類標籤從 [-1, 0, 1] 轉換為 [0, 1, 2] 以符合 XGBoost 要求
+        y_classification = y_classification + 1  # [-1, 0, 1] -> [0, 1, 2]
         
         # 移除 NaN 值
         valid_mask = ~(np.isnan(X).any(axis=1) | np.isnan(y_classification) | np.isnan(y_regression))
@@ -299,6 +305,42 @@ class ModelTrainer:
         
         # 載入數據
         features, labels = self.load_data()
+        
+        # 準備數據
+        data = self.prepare_data(features, labels)
+        
+        # 訓練各個模型
+        results = {}
+        
+        try:
+            results['logistic_regression'] = self.train_logistic_regression(data)
+            results['xgboost_classifier'] = self.train_xgboost_classifier(data)
+            results['xgboost_regressor'] = self.train_xgboost_regressor(data)
+            
+            logger.info("=== 所有模型訓練完成 ===")
+            
+            # 保存模型
+            self.save_models()
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"模型訓練過程中發生錯誤: {e}")
+            raise
+    
+    def train_with_data(self, features: np.ndarray, labels: np.ndarray) -> Dict[str, Any]:
+        """
+        使用提供的數據訓練所有模型
+        
+        Args:
+            features: 特徵矩陣
+            labels: 標籤矩陣
+            
+        Returns:
+            所有模型的評估結果
+        """
+        logger.info("=== 開始使用提供數據訓練所有模型 ===")
+        logger.info(f"特徵形狀: {features.shape}, 標籤形狀: {labels.shape}")
         
         # 準備數據
         data = self.prepare_data(features, labels)

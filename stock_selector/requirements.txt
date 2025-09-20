@@ -7,7 +7,7 @@ scipy>=1.9.0
 
 # 機器學習
 scikit-learn>=1.1.0
-xgboost[gpu]>=1.6.0  # 包含 GPU 支持
+xgboost>=1.6.0  # 移除 GPU 支持避免複雜性
 lightgbm>=3.3.0
 
 # 深度學習與NLP
@@ -16,8 +16,8 @@ transformers>=4.20.0
 sentence-transformers>=2.2.0
 
 # 技術指標計算
-ta-lib>=0.4.25
-talib-binary>=0.4.19
+# ta-lib>=0.4.25  # 需要特殊安裝
+# talib-binary>=0.4.19  # 找不到此套件
 
 # 數據收集
 requests>=2.28.0
