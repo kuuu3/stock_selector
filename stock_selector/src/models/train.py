@@ -206,8 +206,8 @@ class ModelTrainer:
         # 根據 GPU 可用性添加 GPU 參數
         if self.use_gpu:
             model_params.update({
-                'tree_method': 'gpu_hist',
-                'device': 'gpu:0'
+                'tree_method': 'hist',
+                'device': 'cuda:0'
             })
             logger.info("使用 GPU 加速訓練 XGBoost Classifier")
         else:
@@ -261,8 +261,8 @@ class ModelTrainer:
         # 根據 GPU 可用性添加 GPU 參數
         if self.use_gpu:
             model_params.update({
-                'tree_method': 'gpu_hist',
-                'device': 'gpu:0'
+                'tree_method': 'hist',
+                'device': 'cuda:0'
             })
             logger.info("使用 GPU 加速訓練 XGBoost Regressor")
         else:

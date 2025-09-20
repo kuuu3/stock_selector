@@ -53,8 +53,26 @@ class PriceFetcher:
             end_date = datetime.datetime.now()
             start_date = end_date - datetime.timedelta(days=days)
             
-            # 使用新的 API 調用方式
-            data_list = stock.fetch(start_date.year, start_date.month)
+            # 收集多個月的數據
+            all_data = []
+            current_date = start_date
+            
+            while current_date <= end_date:
+                try:
+                    data_list = stock.fetch(current_date.year, current_date.month)
+                    if data_list:
+                        all_data.extend(data_list)
+                    time.sleep(0.1)  # 避免請求過快
+                except Exception as e:
+                    logger.warning(f"獲取 {current_date.year}-{current_date.month} 數據失敗: {e}")
+                
+                # 移動到下一個月
+                if current_date.month == 12:
+                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                else:
+                    current_date = current_date.replace(month=current_date.month + 1)
+            
+            data_list = all_data
             
             if data_list is None or len(data_list) == 0:
                 logger.warning(f"無法獲取股票 {stock_code} 的數據")

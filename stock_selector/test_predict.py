@@ -23,13 +23,13 @@ def test_imports():
         logger.info("測試導入模組...")
         
         from src.data_collection import PriceFetcher
-        logger.info("✓ PriceFetcher 導入成功")
+        logger.info("PriceFetcher 導入成功")
         
         from src.preprocessing import FeatureEngineer
-        logger.info("✓ FeatureEngineer 導入成功")
+        logger.info("FeatureEngineer 導入成功")
         
         from src.models import StockPredictor
-        logger.info("✓ StockPredictor 導入成功")
+        logger.info("StockPredictor 導入成功")
         
         return True
     except Exception as e:
@@ -62,21 +62,46 @@ def test_models():
         logger.error(f"模型測試失敗: {e}")
         return False
 
+def test_data():
+    """測試數據文件"""
+    try:
+        logger.info("測試數據文件...")
+        
+        price_file = Path("data/raw/prices.csv")
+        if not price_file.exists():
+            logger.error("找不到數據文件 data/raw/prices.csv")
+            return False
+        
+        import pandas as pd
+        df = pd.read_csv(price_file)
+        logger.info(f"數據文件正常，共 {len(df)} 筆記錄")
+        
+        return True
+    except Exception as e:
+        logger.error(f"數據測試失敗: {e}")
+        return False
+
 def main():
     """主測試流程"""
-    logger.info("=== 開始測試預測功能 ===")
+    logger.info("=== 開始系統診斷 ===")
     
     # 測試1: 導入
     if not test_imports():
         logger.error("導入測試失敗")
         return
     
-    # 測試2: 模型
+    # 測試2: 數據
+    if not test_data():
+        logger.error("數據測試失敗")
+        return
+    
+    # 測試3: 模型
     if not test_models():
         logger.error("模型測試失敗")
         return
     
-    logger.info("=== 所有測試通過 ===")
+    logger.info("=== 系統診斷完成，所有檢查通過 ===")
+    logger.info("系統狀態正常，可以進行預測")
 
 if __name__ == "__main__":
     try:

@@ -105,7 +105,7 @@ class FeatureEngineer:
             features['volatility'] = stock_df['close'].rolling(TECHNICAL_INDICATORS["VOLATILITY_PERIOD"]).std()
             
             # 價格變化
-            features['price_change'] = stock_df['close'].pct_change()
+            features['price_change'] = stock_df['close'].pct_change(fill_method=None)
             
             result_data.append(pd.DataFrame(features))
         
@@ -117,7 +117,7 @@ class FeatureEngineer:
         
         # 多期間價格變化
         for period in self.price_change_periods:
-            result_df[f'price_change_{period}d'] = result_df.groupby('stock_code')['close'].pct_change(periods=period)
+            result_df[f'price_change_{period}d'] = result_df.groupby('stock_code')['close'].pct_change(periods=period, fill_method=None)
         
         # 多期間移動平均線
         for period in self.lookback_periods:
@@ -163,10 +163,10 @@ class FeatureEngineer:
         result_df = df.copy()
         
         # 未來1週報酬率
-        result_df['future_return_1w'] = result_df.groupby('stock_code')['close'].pct_change(periods=5)
+        result_df['future_return_1w'] = result_df.groupby('stock_code')['close'].pct_change(periods=5, fill_method=None)
         
         # 未來1個月報酬率
-        result_df['future_return_1m'] = result_df.groupby('stock_code')['close'].pct_change(periods=20)
+        result_df['future_return_1m'] = result_df.groupby('stock_code')['close'].pct_change(periods=20, fill_method=None)
         
         # 分類標籤：漲(1)、跌(-1)、平(0)
         result_df['label_1w'] = result_df['future_return_1w'].apply(self._create_classification_label)
@@ -200,7 +200,7 @@ class FeatureEngineer:
         logger.info(f"移除關鍵特徵全為NaN後: {len(df)}")
         
         # 用前向填充和0填充處理其他NaN
-        df = df.fillna(method='ffill').fillna(0)
+        df = df.ffill().fillna(0)
         logger.info(f"填充NaN後: {len(df)}")
         
         # 移除極端值（更寬鬆的處理）

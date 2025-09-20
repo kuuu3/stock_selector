@@ -1,421 +1,487 @@
 """
-回測模組
-模擬交易並分析選股策略的歷史表現
+回測系統 - 測試股票選股策略的歷史表現
 """
 
+import sys
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from typing import Dict, List, Tuple, Optional
 import logging
-from typing import Dict, List, Tuple, Any
-from pathlib import Path
 
-from ..config import (
-    BACKTEST_CONFIG,
-    OUTPUTS_DIR,
-    TOP20_OUTPUT_FILE
+# 添加 src 目錄到 Python 路徑
+src_path = Path(__file__).parent.parent.parent / "src"
+sys.path.insert(0, str(src_path))
+
+from src.preprocessing import FeatureEngineer
+from src.models import StockPredictor
+from src.config import BACKTEST_CONFIG
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
 logger = logging.getLogger(__name__)
 
 
 class Backtester:
-    """回測器"""
+    """回測器 - 測試股票選股策略的歷史表現"""
     
-    def __init__(self):
-        self.initial_capital = BACKTEST_CONFIG["INITIAL_CAPITAL"]
+    def __init__(self, initial_capital: float = None):
+        """
+        初始化回測器
+        
+        Args:
+            initial_capital: 初始資金（台幣）
+        """
+        self.initial_capital = initial_capital or BACKTEST_CONFIG["INITIAL_CAPITAL"]
+        self.current_capital = self.initial_capital
+        self.positions = {}  # 當前持倉
+        self.trade_history = []  # 交易歷史
+        self.portfolio_values = []  # 投資組合價值歷史
+        self.benchmark_values = []  # 基準（買入持有）價值歷史
+        
+        # 交易成本
         self.commission_rate = BACKTEST_CONFIG["COMMISSION_RATE"]
         self.tax_rate = BACKTEST_CONFIG["TAX_RATE"]
+        
+        # 再平衡頻率
         self.rebalance_frequency = BACKTEST_CONFIG["REBALANCE_FREQUENCY"]
         
-        self.portfolio = {}
-        self.cash = self.initial_capital
-        self.transactions = []
-        self.portfolio_history = []
-        
-    def load_price_data(self, file_path: Path) -> pd.DataFrame:
-        """
-        載入股價數據
-        
-        Args:
-            file_path: 股價數據檔案路徑
-            
-        Returns:
-            股價數據 DataFrame
-        """
-        try:
-            df = pd.read_csv(file_path)
-            df['date'] = pd.to_datetime(df['date'])
-            df = df.sort_values(['stock_code', 'date']).reset_index(drop=True)
-            
-            logger.info(f"載入股價數據: {len(df)} 筆")
-            return df
-            
-        except Exception as e:
-            logger.error(f"載入股價數據失敗: {e}")
-            return pd.DataFrame()
+        logger.info(f"初始化回測器 - 初始資金: {self.initial_capital:,.0f} 台幣")
     
-    def calculate_portfolio_value(self, prices: pd.DataFrame, date: datetime) -> float:
-        """
-        計算投資組合價值
+    def load_data(self, price_file: str = "data/raw/prices.csv") -> pd.DataFrame:
+        """載入股價數據"""
+        price_path = Path(price_file)
+        if not price_path.exists():
+            raise FileNotFoundError(f"找不到股價數據文件: {price_file}")
         
-        Args:
-            prices: 股價數據
-            date: 計算日期
-            
-        Returns:
-            投資組合總價值
-        """
-        total_value = self.cash
+        df = pd.read_csv(price_path)
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values(['date', 'stock_code']).reset_index(drop=True)
         
-        for stock_code, shares in self.portfolio.items():
-            if shares > 0:
-                # 獲取當日股價
-                stock_price = prices[
-                    (prices['stock_code'] == stock_code) & 
-                    (prices['date'] == date)
-                ]
-                
-                if not stock_price.empty:
-                    price = stock_price['close'].iloc[0]
-                    total_value += shares * price
-        
-        return total_value
+        logger.info(f"載入股價數據: {len(df)} 筆，日期範圍: {df['date'].min()} 到 {df['date'].max()}")
+        return df
     
-    def rebalance_portfolio(self, selected_stocks: pd.DataFrame, 
-                          prices: pd.DataFrame, date: datetime):
-        """
-        重新平衡投資組合
+    def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """準備特徵數據"""
+        logger.info("進行特徵工程...")
+        feature_engineer = FeatureEngineer()
+        features_df = feature_engineer.create_features(df)
         
-        Args:
-            selected_stocks: 選中的股票 DataFrame
-            prices: 股價數據
-            date: 重新平衡日期
-        """
-        # 計算當前投資組合價值
-        current_value = self.calculate_portfolio_value(prices, date)
+        if features_df.empty:
+            raise ValueError("特徵工程失敗")
         
-        # 清空當前持倉
-        for stock_code in list(self.portfolio.keys()):
-            if self.portfolio[stock_code] > 0:
-                self._sell_stock(stock_code, self.portfolio[stock_code], prices, date)
-        
-        # 等權重分配
-        num_stocks = len(selected_stocks)
-        if num_stocks == 0:
-            return
-        
-        weight_per_stock = 1.0 / num_stocks
-        target_value_per_stock = current_value * weight_per_stock
-        
-        # 買入新選中的股票
-        for _, stock in selected_stocks.iterrows():
-            stock_code = stock['stock_code']
-            
-            # 獲取當日股價
-            stock_price = prices[
-                (prices['stock_code'] == stock_code) & 
-                (prices['date'] == date)
-            ]
-            
-            if not stock_price.empty:
-                price = stock_price['close'].iloc[0]
-                shares = int(target_value_per_stock / price)
-                
-                if shares > 0:
-                    self._buy_stock(stock_code, shares, price, date)
+        logger.info(f"特徵工程完成: {len(features_df)} 個樣本，{len(features_df.columns)} 個特徵")
+        return features_df
     
-    def _buy_stock(self, stock_code: str, shares: int, price: float, date: datetime):
-        """
-        買入股票
+    def get_predictions(self, features_df: pd.DataFrame, predictor: StockPredictor) -> pd.DataFrame:
+        """獲取預測結果"""
+        logger.info("進行模型預測...")
         
-        Args:
-            stock_code: 股票代碼
-            shares: 股數
-            price: 股價
-            date: 交易日期
-        """
-        cost = shares * price
-        commission = cost * self.commission_rate
+        # 準備預測數據
+        feature_columns = [col for col in features_df.columns
+                          if not col.startswith('label_') and
+                          col not in ['future_return_1w', 'future_return_1m', 'date', 'stock_code']]
         
-        if self.cash >= cost + commission:
-            self.cash -= (cost + commission)
-            
-            if stock_code not in self.portfolio:
-                self.portfolio[stock_code] = 0
-            self.portfolio[stock_code] += shares
-            
-            # 記錄交易
-            self.transactions.append({
-                'date': date,
-                'stock_code': stock_code,
-                'action': 'buy',
-                'shares': shares,
-                'price': price,
-                'cost': cost,
-                'commission': commission
-            })
-            
-            logger.debug(f"買入 {stock_code}: {shares} 股 @ {price}")
-    
-    def _sell_stock(self, stock_code: str, shares: int, prices: pd.DataFrame, date: datetime):
-        """
-        賣出股票
+        prediction_data = features_df[feature_columns].select_dtypes(include=[np.number]).values
         
-        Args:
-            stock_code: 股票代碼
-            shares: 股數
-            prices: 股價數據
-            date: 交易日期
-        """
-        if stock_code not in self.portfolio or self.portfolio[stock_code] <= 0:
-            return
+        # 進行預測
+        classification_results = predictor.predict_classification(prediction_data)
+        regression_results = predictor.predict_regression(prediction_data)
         
-        # 獲取當日股價
-        stock_price = prices[
-            (prices['stock_code'] == stock_code) & 
-            (prices['date'] == date)
-        ]
+        # 創建預測結果DataFrame
+        results_df = features_df[['date', 'stock_code']].copy()
         
-        if not stock_price.empty:
-            price = stock_price['close'].iloc[0]
-            proceeds = shares * price
-            commission = proceeds * self.commission_rate
-            tax = proceeds * self.tax_rate
-            
-            self.cash += (proceeds - commission - tax)
-            self.portfolio[stock_code] -= shares
-            
-            # 記錄交易
-            self.transactions.append({
-                'date': date,
-                'stock_code': stock_code,
-                'action': 'sell',
-                'shares': shares,
-                'price': price,
-                'proceeds': proceeds,
-                'commission': commission,
-                'tax': tax
-            })
-            
-            logger.debug(f"賣出 {stock_code}: {shares} 股 @ {price}")
-    
-    def run_backtest(self, prices: pd.DataFrame, 
-                    selection_strategy: callable = None) -> Dict[str, Any]:
-        """
-        運行回測
+        # 添加分類預測結果
+        if 'logistic_regression' in classification_results:
+            lr_probs = classification_results['logistic_regression']['probabilities']
+            results_df['lr_prob'] = lr_probs[:, 2]  # 取上漲概率
         
-        Args:
-            prices: 股價數據
-            selection_strategy: 選股策略函數
-            
-        Returns:
-            回測結果字典
-        """
-        logger.info("開始運行回測...")
+        if 'xgboost_classifier' in classification_results:
+            xgb_probs = classification_results['xgboost_classifier']['probabilities']
+            results_df['xgb_prob'] = xgb_probs[:, 2]  # 取上漲概率
         
-        # 初始化
-        self.portfolio = {}
-        self.cash = self.initial_capital
-        self.transactions = []
-        self.portfolio_history = []
+        # 添加回歸預測結果
+        if 'xgboost_regressor' in regression_results:
+            results_df['xgb_return'] = regression_results['xgboost_regressor']['predictions']
         
-        # 獲取所有交易日
-        trading_days = sorted(prices['date'].unique())
+        # 計算綜合評分
+        score_components = []
+        if 'lr_prob' in results_df.columns:
+            score_components.append(results_df['lr_prob'] * 0.3)
+        if 'xgb_prob' in results_df.columns:
+            score_components.append(results_df['xgb_prob'] * 0.5)
+        if 'xgb_return' in results_df.columns:
+            score_components.append(results_df['xgb_return'] * 100 * 0.2)
         
-        # 模擬每日交易
-        for i, date in enumerate(trading_days):
-            # 計算投資組合價值
-            portfolio_value = self.calculate_portfolio_value(prices, date)
-            
-            # 記錄投資組合歷史
-            self.portfolio_history.append({
-                'date': date,
-                'portfolio_value': portfolio_value,
-                'cash': self.cash,
-                'num_positions': len([s for s in self.portfolio.values() if s > 0])
-            })
-            
-            # 重新平衡（每週或每月）
-            if self._should_rebalance(date, i):
-                if selection_strategy:
-                    # 使用選股策略
-                    selected_stocks = selection_strategy(prices, date)
-                    self.rebalance_portfolio(selected_stocks, prices, date)
-                else:
-                    # 簡單策略：持有所有股票
-                    all_stocks = prices[prices['date'] == date][['stock_code']].drop_duplicates()
-                    self.rebalance_portfolio(all_stocks, prices, date)
-        
-        # 計算回測結果
-        results = self._calculate_results(prices)
-        
-        logger.info("回測完成")
-        return results
-    
-    def _should_rebalance(self, date: datetime, day_index: int) -> bool:
-        """
-        判斷是否應該重新平衡
-        
-        Args:
-            date: 當前日期
-            day_index: 日期索引
-            
-        Returns:
-            是否應該重新平衡
-        """
-        if self.rebalance_frequency == "daily":
-            return True
-        elif self.rebalance_frequency == "weekly":
-            return day_index % 5 == 0  # 每5個交易日
-        elif self.rebalance_frequency == "monthly":
-            return day_index % 20 == 0  # 每20個交易日
+        if score_components:
+            results_df['composite_score'] = sum(score_components)
         else:
-            return day_index % 5 == 0  # 預設每週
-    
-    def _calculate_results(self, prices: pd.DataFrame) -> Dict[str, Any]:
-        """
-        計算回測結果
+            results_df['composite_score'] = 0
         
-        Args:
-            prices: 股價數據
+        logger.info("預測完成")
+        return results_df
+    
+    def select_stocks(self, predictions_df: pd.DataFrame, date: pd.Timestamp, top_n: int = 20) -> List[str]:
+        """選擇股票"""
+        # 獲取指定日期的預測結果
+        date_predictions = predictions_df[predictions_df['date'] == date].copy()
+        
+        if date_predictions.empty:
+            return []
+        
+        # 按綜合評分排序，選擇Top N
+        top_stocks = date_predictions.nlargest(top_n, 'composite_score')['stock_code'].tolist()
+        
+        return top_stocks
+    
+    def calculate_position_size(self, stock_code: str, price: float, target_weight: float) -> int:
+        """計算持倉數量"""
+        target_value = self.current_capital * target_weight
+        shares = int(target_value / price)
+        return shares
+    
+    def execute_trade(self, stock_code: str, shares: int, price: float, action: str) -> Dict:
+        """執行交易"""
+        if action == 'buy':
+            cost = shares * price
+            commission = cost * self.commission_rate
+            total_cost = cost + commission
             
-        Returns:
-            回測結果字典
-        """
-        if not self.portfolio_history:
+            if total_cost <= self.current_capital:
+                self.current_capital -= total_cost
+                if stock_code in self.positions:
+                    self.positions[stock_code] += shares
+                else:
+                    self.positions[stock_code] = shares
+                
+                trade = {
+                    'date': datetime.now(),
+                    'stock_code': stock_code,
+                    'action': 'buy',
+                    'shares': shares,
+                    'price': price,
+                    'cost': total_cost,
+                    'commission': commission
+                }
+                self.trade_history.append(trade)
+                return trade
+        
+        elif action == 'sell':
+            if stock_code in self.positions and self.positions[stock_code] >= shares:
+                proceeds = shares * price
+                commission = proceeds * self.commission_rate
+                tax = proceeds * self.tax_rate
+                net_proceeds = proceeds - commission - tax
+                
+                self.current_capital += net_proceeds
+                self.positions[stock_code] -= shares
+                
+                if self.positions[stock_code] == 0:
+                    del self.positions[stock_code]
+                
+                trade = {
+                    'date': datetime.now(),
+                    'stock_code': stock_code,
+                    'action': 'sell',
+                    'shares': shares,
+                    'price': price,
+                    'proceeds': proceeds,
+                    'commission': commission,
+                    'tax': tax,
+                    'net_proceeds': net_proceeds
+                }
+                self.trade_history.append(trade)
+                return trade
+        
+        return None
+    
+    def rebalance_portfolio(self, target_stocks: List[str], prices_df: pd.DataFrame, date: pd.Timestamp):
+        """再平衡投資組合"""
+        logger.info(f"再平衡投資組合 - 目標股票: {target_stocks}")
+        
+        # 計算目標權重（等權重）
+        target_weight = 1.0 / len(target_stocks) if target_stocks else 0
+        
+        # 賣出不在目標清單中的股票
+        current_stocks = list(self.positions.keys())
+        for stock_code in current_stocks:
+            if stock_code not in target_stocks:
+                # 獲取當前價格
+                stock_data = prices_df[(prices_df['date'] == date) & 
+                                     (prices_df['stock_code'] == stock_code)]
+                if stock_data.empty:
+                    logger.warning(f"找不到股票 {stock_code} 在 {date} 的價格數據")
+                    continue
+                
+                stock_price = stock_data['close'].iloc[0]
+                
+                shares_to_sell = self.positions[stock_code]
+                self.execute_trade(stock_code, shares_to_sell, stock_price, 'sell')
+                logger.info(f"賣出 {stock_code}: {shares_to_sell} 股 @ {stock_price:.2f}")
+        
+        # 買入目標股票
+        for stock_code in target_stocks:
+            # 獲取當前價格
+            stock_data = prices_df[(prices_df['date'] == date) & 
+                                 (prices_df['stock_code'] == stock_code)]
+            if stock_data.empty:
+                logger.warning(f"找不到股票 {stock_code} 在 {date} 的價格數據")
+                continue
+            
+            stock_price = stock_data['close'].iloc[0]
+            
+            # 計算目標持倉數量
+            target_shares = self.calculate_position_size(stock_code, stock_price, target_weight)
+            
+            # 計算需要買入的數量
+            current_shares = self.positions.get(stock_code, 0)
+            shares_to_buy = max(0, target_shares - current_shares)
+            
+            if shares_to_buy > 0:
+                self.execute_trade(stock_code, shares_to_buy, stock_price, 'buy')
+                logger.info(f"買入 {stock_code}: {shares_to_buy} 股 @ {stock_price:.2f}")
+    
+    def calculate_portfolio_value(self, prices_df: pd.DataFrame, date: pd.Timestamp) -> float:
+        """計算投資組合價值"""
+        portfolio_value = self.current_capital
+        
+        for stock_code, shares in self.positions.items():
+            stock_data = prices_df[(prices_df['date'] == date) & 
+                                 (prices_df['stock_code'] == stock_code)]
+            if not stock_data.empty:
+                stock_price = stock_data['close'].iloc[0]
+                portfolio_value += shares * stock_price
+        
+        return portfolio_value
+    
+    def calculate_benchmark_value(self, prices_df: pd.DataFrame, start_date: pd.Timestamp, 
+                                end_date: pd.Timestamp, benchmark_stocks: List[str] = None) -> float:
+        """計算基準價值（買入持有策略）"""
+        if benchmark_stocks is None:
+            # 使用所有股票的平均表現作為基準
+            all_stocks = prices_df['stock_code'].unique()
+            benchmark_stocks = all_stocks[:10]  # 取前10支股票
+        
+        # 計算基準組合的總價值
+        benchmark_value = 0
+        weight = 1.0 / len(benchmark_stocks)
+        
+        for stock_code in benchmark_stocks:
+            start_data = prices_df[(prices_df['date'] == start_date) & 
+                                 (prices_df['stock_code'] == stock_code)]
+            end_data = prices_df[(prices_df['date'] == end_date) & 
+                               (prices_df['stock_code'] == stock_code)]
+            
+            if start_data.empty or end_data.empty:
+                continue
+            
+            start_price = start_data['close'].iloc[0]
+            end_price = end_data['close'].iloc[0]
+            
+            shares = (self.initial_capital * weight) / start_price
+            benchmark_value += shares * end_price
+        
+        return benchmark_value
+    
+    def run_backtest(self, start_date: str = None, end_date: str = None, 
+                    top_n: int = 20, rebalance_days: int = 5) -> Dict:
+        """運行回測"""
+        logger.info("=== 開始回測 ===")
+        
+        # 載入數據
+        prices_df = self.load_data()
+        
+        # 設置回測期間
+        if start_date:
+            start_date = pd.to_datetime(start_date)
+            prices_df = prices_df[prices_df['date'] >= start_date]
+        else:
+            start_date = prices_df['date'].min()
+        
+        if end_date:
+            end_date = pd.to_datetime(end_date)
+            prices_df = prices_df[prices_df['date'] <= end_date]
+        else:
+            end_date = prices_df['date'].max()
+        
+        logger.info(f"回測期間: {start_date} 到 {end_date}")
+        
+        # 準備特徵和預測
+        features_df = self.prepare_features(prices_df)
+        predictor = StockPredictor()
+        if not predictor.load_models():
+            raise RuntimeError("無法載入模型")
+        
+        predictions_df = self.get_predictions(features_df, predictor)
+        
+        # 獲取所有交易日期
+        all_dates = sorted(predictions_df['date'].unique())
+        rebalance_dates = all_dates[::rebalance_days]  # 每N天再平衡一次
+        
+        logger.info(f"回測日期: {len(rebalance_dates)} 個再平衡點")
+        
+        # 初始化基準組合
+        benchmark_stocks = predictions_df[predictions_df['date'] == all_dates[0]].nlargest(10, 'composite_score')['stock_code'].tolist()
+        
+        # 運行回測
+        for i, date in enumerate(rebalance_dates):
+            logger.info(f"處理日期 {i+1}/{len(rebalance_dates)}: {date}")
+            
+            # 選擇股票
+            target_stocks = self.select_stocks(predictions_df, date, top_n)
+            
+            if target_stocks:
+                # 再平衡投資組合
+                self.rebalance_portfolio(target_stocks, prices_df, date)
+            
+            # 計算投資組合價值
+            portfolio_value = self.calculate_portfolio_value(prices_df, date)
+            self.portfolio_values.append({
+                'date': date,
+                'value': portfolio_value,
+                'cash': self.current_capital,
+                'positions': dict(self.positions)
+            })
+            
+            # 計算基準價值
+            benchmark_value = self.calculate_benchmark_value(prices_df, all_dates[0], date, benchmark_stocks)
+            self.benchmark_values.append({
+                'date': date,
+                'value': benchmark_value
+            })
+        
+        # 計算績效指標
+        performance = self.calculate_performance()
+        
+        logger.info("=== 回測完成 ===")
+        return performance
+    
+    def calculate_performance(self) -> Dict:
+        """計算績效指標"""
+        if not self.portfolio_values:
             return {}
         
-        # 轉換為 DataFrame
-        history_df = pd.DataFrame(self.portfolio_history)
-        history_df = history_df.sort_values('date')
+        # 提取價值序列
+        portfolio_values = [pv['value'] for pv in self.portfolio_values]
+        benchmark_values = [bv['value'] for bv in self.benchmark_values]
         
-        # 計算基本指標
-        initial_value = history_df['portfolio_value'].iloc[0]
-        final_value = history_df['portfolio_value'].iloc[-1]
-        total_return = (final_value - initial_value) / initial_value
+        # 計算總報酬率
+        total_return = (portfolio_values[-1] - self.initial_capital) / self.initial_capital
+        benchmark_return = (benchmark_values[-1] - self.initial_capital) / self.initial_capital
         
         # 計算年化報酬率
-        days = (history_df['date'].iloc[-1] - history_df['date'].iloc[0]).days
-        years = days / 365.25
-        annualized_return = (final_value / initial_value) ** (1 / years) - 1 if years > 0 else 0
+        days = (self.portfolio_values[-1]['date'] - self.portfolio_values[0]['date']).days
+        annualized_return = (1 + total_return) ** (365 / days) - 1
+        benchmark_annualized = (1 + benchmark_return) ** (365 / days) - 1
+        
+        # 計算夏普比率
+        returns = np.diff(portfolio_values) / portfolio_values[:-1]
+        sharpe_ratio = np.mean(returns) / np.std(returns) * np.sqrt(252) if np.std(returns) > 0 else 0
         
         # 計算最大回撤
-        history_df['cumulative_max'] = history_df['portfolio_value'].cummax()
-        history_df['drawdown'] = (history_df['portfolio_value'] - history_df['cumulative_max']) / history_df['cumulative_max']
-        max_drawdown = history_df['drawdown'].min()
+        peak = np.maximum.accumulate(portfolio_values)
+        drawdown = (portfolio_values - peak) / peak
+        max_drawdown = np.min(drawdown)
         
-        # 計算夏普比率（假設無風險利率為2%）
-        risk_free_rate = 0.02
-        returns = history_df['portfolio_value'].pct_change().dropna()
-        excess_returns = returns - risk_free_rate / 252  # 日無風險利率
-        sharpe_ratio = excess_returns.mean() / returns.std() * np.sqrt(252) if returns.std() > 0 else 0
+        # 計算勝率
+        winning_trades = len([t for t in self.trade_history if t['action'] == 'sell' and t['net_proceeds'] > 0])
+        total_trades = len([t for t in self.trade_history if t['action'] == 'sell'])
+        win_rate = winning_trades / total_trades if total_trades > 0 else 0
         
-        # 計算交易統計
-        buy_transactions = [t for t in self.transactions if t['action'] == 'buy']
-        sell_transactions = [t for t in self.transactions if t['action'] == 'sell']
-        
-        total_commission = sum(t.get('commission', 0) for t in self.transactions)
-        total_tax = sum(t.get('tax', 0) for t in self.transactions)
-        
-        results = {
-            'initial_capital': initial_value,
-            'final_value': final_value,
+        performance = {
+            'initial_capital': self.initial_capital,
+            'final_value': portfolio_values[-1],
             'total_return': total_return,
             'annualized_return': annualized_return,
-            'max_drawdown': max_drawdown,
+            'benchmark_return': benchmark_return,
+            'benchmark_annualized': benchmark_annualized,
+            'excess_return': total_return - benchmark_return,
             'sharpe_ratio': sharpe_ratio,
-            'total_trades': len(self.transactions),
-            'buy_trades': len(buy_transactions),
-            'sell_trades': len(sell_transactions),
-            'total_commission': total_commission,
-            'total_tax': total_tax,
-            'portfolio_history': history_df,
-            'transactions': self.transactions
+            'max_drawdown': max_drawdown,
+            'win_rate': win_rate,
+            'total_trades': len(self.trade_history),
+            'winning_trades': winning_trades,
+            'portfolio_values': self.portfolio_values,
+            'benchmark_values': self.benchmark_values,
+            'trade_history': self.trade_history
         }
         
-        logger.info(f"回測結果:")
-        logger.info(f"  初始資金: {initial_value:,.0f}")
-        logger.info(f"  最終價值: {final_value:,.0f}")
-        logger.info(f"  總報酬率: {total_return:.2%}")
-        logger.info(f"  年化報酬率: {annualized_return:.2%}")
-        logger.info(f"  最大回撤: {max_drawdown:.2%}")
-        logger.info(f"  夏普比率: {sharpe_ratio:.2f}")
-        
-        return results
+        return performance
     
-    def save_results(self, results: Dict[str, Any], filename: str = "backtest_report.csv"):
-        """
-        保存回測結果
-        
-        Args:
-            results: 回測結果
-            filename: 檔案名稱
-        """
-        if not results:
-            logger.warning("沒有回測結果可保存")
-            return
-        
-        # 保存投資組合歷史
-        if 'portfolio_history' in results:
-            output_file = OUTPUTS_DIR / filename
-            results['portfolio_history'].to_csv(output_file, index=False, encoding='utf-8-sig')
-            logger.info(f"回測結果已保存到: {output_file}")
-        
-        # 保存交易記錄
-        if results.get('transactions'):
-            transactions_file = OUTPUTS_DIR / "transactions.csv"
-            transactions_df = pd.DataFrame(results['transactions'])
-            transactions_df.to_csv(transactions_file, index=False, encoding='utf-8-sig')
-            logger.info(f"交易記錄已保存到: {transactions_file}")
+    def generate_report(self, performance: Dict) -> str:
+        """生成回測報告"""
+        report = f"""
+=== 股票選股策略回測報告 ===
 
+基本資訊:
+- 初始資金: {performance['initial_capital']:,.0f} 台幣
+- 最終價值: {performance['final_value']:,.0f} 台幣
+- 回測期間: {self.portfolio_values[0]['date'].strftime('%Y-%m-%d')} 到 {self.portfolio_values[-1]['date'].strftime('%Y-%m-%d')}
 
-def simple_selection_strategy(prices: pd.DataFrame, date: datetime) -> pd.DataFrame:
-    """
-    簡單選股策略：選擇前20支股票
-    
-    Args:
-        prices: 股價數據
-        date: 選股日期
+績效指標:
+- 總報酬率: {performance['total_return']:.2%}
+- 年化報酬率: {performance['annualized_return']:.2%}
+- 基準報酬率: {performance['benchmark_return']:.2%}
+- 超額報酬: {performance['excess_return']:.2%}
+- 夏普比率: {performance['sharpe_ratio']:.3f}
+- 最大回撤: {performance['max_drawdown']:.2%}
+
+交易統計:
+- 總交易次數: {performance['total_trades']}
+- 獲利交易: {performance['winning_trades']}
+- 勝率: {performance['win_rate']:.2%}
+
+風險評估:
+- 策略表現: {'優秀' if performance['excess_return'] > 0.05 else '良好' if performance['excess_return'] > 0 else '需改進'}
+- 風險等級: {'低' if abs(performance['max_drawdown']) < 0.1 else '中' if abs(performance['max_drawdown']) < 0.2 else '高'}
+"""
         
-    Returns:
-        選中的股票 DataFrame
-    """
-    # 獲取當日所有股票
-    daily_prices = prices[prices['date'] == date]
-    
-    if daily_prices.empty:
-        return pd.DataFrame()
-    
-    # 簡單策略：按成交量排序，選擇前20支
-    top_stocks = daily_prices.nlargest(20, 'volume')
-    
-    return top_stocks[['stock_code']].drop_duplicates()
+        return report
 
 
 def main():
-    """主函數 - 用於測試回測功能"""
-    backtester = Backtester()
-    
-    # 載入股價數據
-    prices_file = Path("data/raw/prices.csv")
-    if not prices_file.exists():
-        logger.error("找不到股價數據檔案")
-        return
-    
-    prices = backtester.load_price_data(prices_file)
-    if prices.empty:
-        logger.error("無法載入股價數據")
-        return
-    
-    # 運行回測
-    results = backtester.run_backtest(prices, simple_selection_strategy)
-    
-    if results:
-        # 保存結果
-        backtester.save_results(results)
+    """主函數"""
+    try:
+        # 初始化回測器
+        backtester = Backtester(initial_capital=1000000)  # 100萬台幣
         
-        logger.info("回測測試完成")
+        # 運行回測
+        performance = backtester.run_backtest(
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            top_n=10,
+            rebalance_days=5
+        )
+        
+        # 生成報告
+        report = backtester.generate_report(performance)
+        print(report)
+        
+        # 保存結果
+        output_dir = Path("outputs/backtest")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 保存績效數據
+        performance_df = pd.DataFrame(performance['portfolio_values'])
+        performance_df.to_csv(output_dir / "portfolio_performance.csv", index=False)
+        
+        # 保存交易歷史
+        if performance['trade_history']:
+            trades_df = pd.DataFrame(performance['trade_history'])
+            trades_df.to_csv(output_dir / "trade_history.csv", index=False)
+        
+        # 保存報告
+        with open(output_dir / "backtest_report.txt", 'w', encoding='utf-8') as f:
+            f.write(report)
+        
+        logger.info(f"回測結果已保存到: {output_dir}")
+        
+    except Exception as e:
+        logger.error(f"回測過程中發生錯誤: {e}")
+        raise
 
 
 if __name__ == "__main__":

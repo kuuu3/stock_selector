@@ -46,16 +46,20 @@ MODEL_CONFIG = {
         "max_iter": 1000
     },
     "XGBOOST_CLASSIFIER": {
-        "n_estimators": 50,  # 減少樹的數量
-        "max_depth": 4,      # 減少深度
-        "learning_rate": 0.1,
-        "random_state": 42
+        "n_estimators": 1000,  # 增加樹的數量
+        "max_depth": 8,        # 增加深度
+        "learning_rate": 0.03, # 降低學習率
+        "random_state": 42,
+        "subsample": 0.8,      # 添加子採樣
+        "colsample_bytree": 0.8 # 添加特徵採樣
     },
     "XGBOOST_REGRESSOR": {
-        "n_estimators": 50,  # 減少樹的數量
-        "max_depth": 4,      # 減少深度
-        "learning_rate": 0.1,
-        "random_state": 42
+        "n_estimators": 1000,  # 增加樹的數量
+        "max_depth": 8,        # 增加深度
+        "learning_rate": 0.03, # 降低學習率
+        "random_state": 42,
+        "subsample": 0.8,      # 添加子採樣
+        "colsample_bytree": 0.8 # 添加特徵採樣
     }
 }
 

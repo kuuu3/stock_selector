@@ -13,6 +13,8 @@ sys.path.insert(0, str(src_path))
 from src.data_collection import PriceFetcher
 from src.preprocessing import FeatureEngineer
 from src.models import ModelTrainer, ModelEvaluator
+import shutil
+from datetime import datetime
 import logging
 import numpy as np
 import pandas as pd
@@ -25,36 +27,62 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main(force_refresh_data=False):
-    """主訓練流程
+def backup_existing_models():
+    """備份現有模型到 checkpoint"""
+    models_dir = Path("outputs/models")
+    checkpoints_dir = Path("outputs/checkpoints")
     
-    Args:
-        force_refresh_data: 是否強制重新獲取數據
-    """
+    if not models_dir.exists():
+        logger.info("沒有現有模型需要備份")
+        return True
+    
+    # 創建 checkpoint 目錄
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 創建時間戳目錄
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_dir = checkpoints_dir / timestamp
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 複製所有模型文件
+    model_files = list(models_dir.glob("*.joblib"))
+    if model_files:
+        for model_file in model_files:
+            backup_file = backup_dir / model_file.name
+            shutil.copy2(model_file, backup_file)
+        logger.info(f"現有模型已備份到: {backup_dir}")
+    else:
+        logger.info("沒有找到現有模型文件")
+    
+    return True
+
+def main():
+    """主訓練流程 - 使用現有數據進行訓練"""
     import time
-    
+
     logger.info("=== 開始模型訓練流程 ===")
     start_time = time.time()
-    
+
     try:
-        # 步驟1: 獲取歷史數據（檢查是否已有數據）
+        # 步驟0: 備份現有模型
+        step_start = time.time()
+        logger.info("步驟0: 備份現有模型...")
+        backup_existing_models()
+        
+        step_time = time.time() - step_start
+        logger.info(f"模型備份完成 (耗時: {step_time:.1f}秒)")
+        
+        # 步驟1: 載入現有股價數據
         step_start = time.time()
         price_csv_path = Path("data/raw/prices.csv")
         
-        if price_csv_path.exists() and not force_refresh_data:
-            logger.info("步驟1: 載入現有股價數據...")
-            price_df = pd.read_csv(price_csv_path)
-            logger.info(f"✓ 載入現有數據 {len(price_df)} 筆股價數據")
-        else:
-            logger.info("步驟1: 獲取歷史股價數據...")
-            price_fetcher = PriceFetcher()
-            price_df = price_fetcher.fetch_all_stocks(save_to_file=True)
-            
-            if price_df.empty:
-                logger.error("無法獲取股價數據")
-                return
-            
-            logger.info(f"✓ 成功獲取 {len(price_df)} 筆股價數據")
+        if not price_csv_path.exists():
+            logger.error("找不到股價數據文件，請先運行 fetch_data.py 獲取數據")
+            return
+        
+        logger.info("步驟1: 載入現有股價數據...")
+        price_df = pd.read_csv(price_csv_path)
+        logger.info(f"載入現有數據 {len(price_df)} 筆股價數據")
         
         step_time = time.time() - step_start
         logger.info(f"數據處理完成 (耗時: {step_time:.1f}秒)")
@@ -138,16 +166,8 @@ def main(force_refresh_data=False):
 
 
 if __name__ == "__main__":
-    import argparse
-    
-    # 解析命令行參數
-    parser = argparse.ArgumentParser(description='股票選股模型訓練')
-    parser.add_argument('--refresh-data', action='store_true', 
-                       help='強制重新獲取數據')
-    args = parser.parse_args()
-    
     try:
-        main(force_refresh_data=args.refresh_data)
+        main()
     except Exception as e:
         print(f"程序執行失敗: {e}")
         import traceback
