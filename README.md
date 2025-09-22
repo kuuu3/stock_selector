@@ -36,21 +36,29 @@ stock_selector/
 ### 1. 安裝依賴
 
 ```bash
+cd stock_selector
 pip install -r requirements.txt
 ```
 
 ### 2. 運行系統
 
 ```bash
-python main.py
+# 數據抓取
+python stock_selector/fetch_data.py
+
+# 模型訓練
+python stock_selector/train_model.py
+
+# 股票預測
+python stock_selector/quick_predict.py
 ```
 
 ### 3. 查看結果
 
-- 股價數據: `data/raw/prices.csv`
-- 新聞數據: `data/raw/news.csv`
-- 特徵矩陣: `data/processed/features.npy`
-- 選股結果: `outputs/top20.csv`
+- 股價數據: `stock_selector/data/raw/prices.csv`
+- 新聞數據: `stock_selector/data/raw/news.csv`
+- 特徵矩陣: `stock_selector/data/processed/features.npy`
+- 選股結果: `stock_selector/outputs/top20.csv`
 
 ##  技術指標
 
