@@ -74,7 +74,27 @@ def fetch_new_data(force_refresh=False):
     # 獲取新數據
     try:
         price_fetcher = PriceFetcher()
-        new_df = price_fetcher.fetch_all_stocks(save_to_file=True)
+        
+        if force_refresh:
+            # 強制刷新：重新獲取所有數據
+            logger.info("強制刷新模式：重新獲取所有數據")
+            new_df = price_fetcher.fetch_all_stocks(save_to_file=True)
+        else:
+            # 增量更新：只獲取缺失的數據
+            logger.info("增量更新模式：只獲取缺失的數據")
+            new_data = price_fetcher.fetch_incremental_data(existing_df)
+            
+            if new_data.empty:
+                logger.info("沒有新數據需要更新")
+                return existing_df
+            
+            # 合併新數據和現有數據
+            new_df = pd.concat([existing_df, new_data], ignore_index=True)
+            new_df = new_df.sort_values(['stock_code', 'date']).reset_index(drop=True)
+            
+            # 保存合併後的數據
+            new_df.to_csv(RAW_PRICES_FILE, index=False)
+            logger.info(f"數據已保存到: {RAW_PRICES_FILE}")
         
         if new_df.empty:
             logger.error("無法獲取新數據")
@@ -83,16 +103,16 @@ def fetch_new_data(force_refresh=False):
         new_df['date'] = pd.to_datetime(new_df['date'])
         latest_new = new_df['date'].max()
         
-        logger.info(f"成功獲取新數據")
+        logger.info(f"成功獲取數據")
         logger.info(f"數據筆數: {len(new_df)}")
         logger.info(f"股票數量: {new_df['stock_code'].nunique()}")
         logger.info(f"最新日期: {latest_new.strftime('%Y-%m-%d')}")
         
         # 比較數據更新情況
-        if existing_df is not None:
+        if existing_df is not None and not force_refresh:
             old_latest = existing_df['date'].max()
             if latest_new > old_latest:
-                logger.info("數據已更新")
+                logger.info(f"數據已更新：{old_latest.strftime('%Y-%m-%d')} -> {latest_new.strftime('%Y-%m-%d')}")
             else:
                 logger.info("數據日期相同")
         

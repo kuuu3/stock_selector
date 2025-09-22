@@ -248,13 +248,16 @@ class StockSelector:
             保存檔案的路徑
         """
         if filename is None:
-            filename = TOP20_OUTPUT_FILE
+            # 使用預設的完整路徑
+            output_path = TOP20_OUTPUT_FILE
+        else:
+            # 如果提供檔案名，則組合路徑
+            output_path = OUTPUTS_DIR / filename
         
         # 確保輸出目錄存在
-        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         
         # 保存為CSV
-        output_path = OUTPUTS_DIR / filename
         selected_stocks.to_csv(output_path, index=False, encoding='utf-8-sig')
         
         logger.info(f"選股結果已保存到: {output_path}")

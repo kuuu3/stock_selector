@@ -51,7 +51,9 @@ class PriceFetcher:
             # 獲取歷史數據 - 修復 twstock API 調用
             import datetime
             end_date = datetime.datetime.now()
-            start_date = end_date - datetime.timedelta(days=days)
+            # 限制回看天數為最近6個月，減少請求量
+            limited_days = min(days, 180)  # 最多6個月
+            start_date = end_date - datetime.timedelta(days=limited_days)
             
             # 收集多個月的數據
             all_data = []
@@ -62,15 +64,22 @@ class PriceFetcher:
                     data_list = stock.fetch(current_date.year, current_date.month)
                     if data_list:
                         all_data.extend(data_list)
-                    time.sleep(0.1)  # 避免請求過快
+                        logger.info(f"  獲取 {current_date.year}-{current_date.month:02d}: {len(data_list)} 筆")
+                    time.sleep(0.2)  # 稍微增加延遲避免被限制
                 except Exception as e:
                     logger.warning(f"獲取 {current_date.year}-{current_date.month} 數據失敗: {e}")
                 
-                # 移動到下一個月
+                # 移動到下一個月 - 修復日期溢出問題
+                # 使用更安全的方法：先計算年月，再創建新日期
                 if current_date.month == 12:
-                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                    next_year = current_date.year + 1
+                    next_month = 1
                 else:
-                    current_date = current_date.replace(month=current_date.month + 1)
+                    next_year = current_date.year
+                    next_month = current_date.month + 1
+                
+                # 創建下個月第一天，避免日期溢出
+                current_date = datetime.datetime(next_year, next_month, 1)
             
             data_list = all_data
             
@@ -102,6 +111,73 @@ class PriceFetcher:
             logger.error(f"獲取股票 {stock_code} 數據時發生錯誤: {e}")
             return pd.DataFrame()
     
+    def fetch_incremental_data(self, existing_df: pd.DataFrame = None, days_to_fetch: int = 7) -> pd.DataFrame:
+        """
+        增量獲取數據 - 只獲取缺失的數據
+        
+        Args:
+            existing_df: 現有數據
+            days_to_fetch: 要獲取的天數
+            
+        Returns:
+            新增的數據 DataFrame
+        """
+        if existing_df is None or existing_df.empty:
+            logger.info("沒有現有數據，將獲取完整數據")
+            return self.fetch_all_stocks(save_to_file=False)
+        
+        # 找到最新日期
+        latest_date = existing_df['date'].max()
+        logger.info(f"現有數據最新日期: {latest_date.strftime('%Y-%m-%d')}")
+        
+        # 計算需要獲取的天數
+        import datetime
+        days_old = (datetime.datetime.now() - latest_date).days
+        if days_old <= 0:
+            logger.info("數據已是最新，無需更新")
+            return pd.DataFrame()
+        
+        # 限制獲取天數
+        fetch_days = min(days_old + 5, days_to_fetch)  # 多獲取5天作為緩衝
+        logger.info(f"需要獲取最近 {fetch_days} 天的數據")
+        
+        all_new_data = []
+        
+        for i, stock_code in enumerate(self.stock_list):
+            logger.info(f"增量獲取股票 {stock_code} ({i+1}/{len(self.stock_list)}) - 進度: {i/len(self.stock_list)*100:.1f}%")
+            
+            try:
+                # 只獲取最近幾天的數據
+                df = self.fetch_stock_data(stock_code, days=fetch_days)
+                if not df.empty:
+                    # 過濾掉已存在的數據
+                    existing_stock_data = existing_df[existing_df['stock_code'] == stock_code]
+                    if not existing_stock_data.empty:
+                        existing_dates = set(existing_stock_data['date'].dt.date)
+                        df = df[~df['date'].dt.date.isin(existing_dates)]
+                    
+                    if not df.empty:
+                        all_new_data.append(df)
+                        logger.info(f"  ✓ 新增 {len(df)} 筆數據")
+                    else:
+                        logger.info(f"  - 無新數據")
+                else:
+                    logger.warning(f"  ✗ 未獲取到數據")
+            except Exception as e:
+                logger.error(f"  ✗ 獲取股票 {stock_code} 時發生錯誤: {e}")
+            
+            time.sleep(0.5)
+        
+        if not all_new_data:
+            logger.info("沒有新數據需要更新")
+            return pd.DataFrame()
+        
+        # 合併新數據
+        new_df = pd.concat(all_new_data, ignore_index=True)
+        logger.info(f"總共獲取 {len(new_df)} 筆新數據")
+        
+        return new_df
+
     def fetch_all_stocks(self, save_to_file: bool = True) -> pd.DataFrame:
         """
         獲取所有股票的數據
@@ -117,14 +193,20 @@ class PriceFetcher:
         logger.info(f"開始獲取 {len(self.stock_list)} 支股票的數據...")
         
         for i, stock_code in enumerate(self.stock_list):
-            logger.info(f"正在獲取股票 {stock_code} ({i+1}/{len(self.stock_list)})")
+            logger.info(f"正在獲取股票 {stock_code} ({i+1}/{len(self.stock_list)}) - 進度: {i/len(self.stock_list)*100:.1f}%")
             
-            df = self.fetch_stock_data(stock_code)
-            if not df.empty:
-                all_data.append(df)
+            try:
+                df = self.fetch_stock_data(stock_code)
+                if not df.empty:
+                    all_data.append(df)
+                    logger.info(f"  ✓ 成功獲取 {len(df)} 筆數據")
+                else:
+                    logger.warning(f"  ✗ 未獲取到數據")
+            except Exception as e:
+                logger.error(f"  ✗ 獲取股票 {stock_code} 時發生錯誤: {e}")
             
             # 避免請求過於頻繁
-            time.sleep(1)
+            time.sleep(0.5)  # 減少延遲時間
         
         if not all_data:
             logger.error("沒有成功獲取任何股票數據")

@@ -30,7 +30,7 @@ def main():
     parser.add_argument('--end-date', type=str, help='回測結束日期 (YYYY-MM-DD)')
     parser.add_argument('--capital', type=float, default=1000000, help='初始資金 (台幣)')
     parser.add_argument('--top-n', type=int, default=10, help='選股數量')
-    parser.add_argument('--rebalance-days', type=int, default=5, help='再平衡間隔 (天)')
+    parser.add_argument('--rebalance-days', type=int, default=10, help='再平衡間隔 (天)')
     args = parser.parse_args()
     
     logger.info("=== 開始股票選股策略回測 ===")

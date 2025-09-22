@@ -59,6 +59,7 @@ class Backtester:
         
         df = pd.read_csv(price_path)
         df['date'] = pd.to_datetime(df['date'])
+        df['stock_code'] = df['stock_code'].astype(str)  # 確保 stock_code 是字符串類型
         df = df.sort_values(['date', 'stock_code']).reset_index(drop=True)
         
         logger.info(f"載入股價數據: {len(df)} 筆，日期範圍: {df['date'].min()} 到 {df['date'].max()}")
@@ -138,9 +139,11 @@ class Backtester:
         return top_stocks
     
     def calculate_position_size(self, stock_code: str, price: float, target_weight: float) -> int:
-        """計算持倉數量"""
+        """計算持倉數量（以張為單位，1張=1000股）"""
         target_value = self.current_capital * target_weight
         shares = int(target_value / price)
+        # 台股交易以張為單位，1張=1000股
+        shares = (shares // 1000) * 1000  # 向下取整到最接近的1000股
         return shares
     
     def execute_trade(self, stock_code: str, shares: int, price: float, action: str) -> Dict:
