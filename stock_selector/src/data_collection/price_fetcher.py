@@ -136,9 +136,18 @@ class PriceFetcher:
             logger.info("數據已是最新，無需更新")
             return pd.DataFrame()
         
-        # 限制獲取天數
-        fetch_days = min(days_old + 5, days_to_fetch)  # 多獲取5天作為緩衝
-        logger.info(f"需要獲取最近 {fetch_days} 天的數據")
+        # 計算需要獲取的天數 - 修復：根據數據過期程度動態調整
+        if days_old <= 7:
+            # 數據較新，使用較小的緩衝
+            fetch_days = min(days_old + 5, days_to_fetch)
+        else:
+            # 數據較舊，獲取更多數據來填補缺口
+            # 最多獲取 days_old + 10 天，但不少於 days_to_fetch
+            fetch_days = max(days_old + 10, days_to_fetch)
+            # 但不要超過配置的 lookback_days
+            fetch_days = min(fetch_days, self.lookback_days)
+        
+        logger.info(f"數據已過期 {days_old} 天，將獲取最近 {fetch_days} 天的數據")
         
         all_new_data = []
         

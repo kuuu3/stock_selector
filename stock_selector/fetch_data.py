@@ -89,9 +89,14 @@ def fetch_new_data(force_refresh=False):
                 logger.info("沒有新數據需要更新")
                 return existing_df
             
-            # 合併新數據和現有數據
-            new_df = pd.concat([existing_df, new_data], ignore_index=True)
-            new_df = new_df.sort_values(['stock_code', 'date']).reset_index(drop=True)
+            # 處理 Cold-start 情況：如果沒有現有數據，直接使用新數據
+            if existing_df is None or existing_df.empty:
+                logger.info("Cold-start：使用完整的新數據")
+                new_df = new_data
+            else:
+                # 合併新數據和現有數據
+                new_df = pd.concat([existing_df, new_data], ignore_index=True)
+                new_df = new_df.sort_values(['stock_code', 'date']).reset_index(drop=True)
             
             # 保存合併後的數據
             new_df.to_csv(RAW_PRICES_FILE, index=False)
