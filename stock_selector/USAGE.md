@@ -14,6 +14,24 @@ fetch_data  train_model  quick_predict
 
 ## 快速開始
 
+### 運行方式
+所有腳本都支持從不同目錄運行：
+
+```bash
+# 方式1：在 stock_selector 目錄內運行
+cd stock_selector
+python fetch_data.py --check
+python train_model.py
+python quick_predict.py
+
+# 方式2：從項目根目錄運行
+python stock_selector/fetch_data.py --check
+python stock_selector/train_model.py
+python stock_selector/quick_predict.py
+```
+
+系統會自動處理路徑問題，無論從哪個目錄運行都能正確找到數據文件。
+
 ### 1. 數據抓取
 ```bash
 # 檢查現有數據
@@ -190,16 +208,30 @@ date,stock_code,logistic_regression_prob,xgboost_classifier_prob,xgboost_regress
 ### 常見問題
 
 1. **找不到數據文件**
+   - 問題：`FileNotFoundError: 找不到股價數據文件`
+   - 解決：先運行數據抓取
    ```bash
    python fetch_data.py
    ```
 
-2. **模型載入失敗**
+2. **路徑問題**
+   - 問題：從不同目錄運行時找不到數據文件
+   - 解決：系統已自動處理路徑問題，支持從任意目錄運行
+   ```bash
+   # 從項目根目錄運行
+   python stock_selector/train_model.py
+   
+   # 從 stock_selector 目錄運行
+   cd stock_selector
+   python train_model.py
+   ```
+
+3. **模型載入失敗**
    ```bash
    python train_model.py
    ```
 
-3. **預測結果異常**
+4. **預測結果異常**
    ```bash
    python test_predict.py
    ```
