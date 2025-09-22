@@ -14,7 +14,6 @@ src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
 from src.data_collection import PriceFetcher
-from src.config import RAW_PRICES_FILE
 
 # 設置日誌
 logging.basicConfig(
@@ -26,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 def check_existing_data():
     """檢查現有數據"""
-    price_file = Path("data/raw/prices.csv")
+    # 確保路徑相對於腳本所在目錄
+    script_dir = Path(__file__).parent
+    price_file = script_dir / "data/raw/prices.csv"
     
     if not price_file.exists():
         logger.info("沒有找到現有數據文件")
@@ -99,8 +100,10 @@ def fetch_new_data(force_refresh=False):
                 new_df = new_df.sort_values(['stock_code', 'date']).reset_index(drop=True)
             
             # 保存合併後的數據
-            new_df.to_csv(RAW_PRICES_FILE, index=False)
-            logger.info(f"數據已保存到: {RAW_PRICES_FILE}")
+            script_dir = Path(__file__).parent
+            price_file = script_dir / "data/raw/prices.csv"
+            new_df.to_csv(price_file, index=False)
+            logger.info(f"數據已保存到: {price_file}")
         
         if new_df.empty:
             logger.error("無法獲取新數據")

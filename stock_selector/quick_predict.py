@@ -14,6 +14,7 @@ sys.path.insert(0, str(src_path))
 
 from src.preprocessing import FeatureEngineer
 from src.models import StockPredictor
+from src.config import get_data_file_path
 
 # 設置日誌
 logging.basicConfig(
@@ -34,7 +35,7 @@ def main():
     
     try:
         # 步驟1: 檢查數據文件
-        price_csv_path = Path("data/raw/prices.csv")
+        price_csv_path = get_data_file_path("raw/prices.csv")
         if not price_csv_path.exists():
             logger.error("找不到數據文件 data/raw/prices.csv")
             logger.error("請先運行: python fetch_data.py")

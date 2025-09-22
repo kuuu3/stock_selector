@@ -16,7 +16,7 @@ sys.path.insert(0, str(src_path))
 
 from src.preprocessing import FeatureEngineer
 from src.models import StockPredictor
-from src.config import BACKTEST_CONFIG
+from src.config import BACKTEST_CONFIG, get_data_file_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,11 +51,15 @@ class Backtester:
         
         logger.info(f"初始化回測器 - 初始資金: {self.initial_capital:,.0f} 台幣")
     
-    def load_data(self, price_file: str = "data/raw/prices.csv") -> pd.DataFrame:
+    def load_data(self, price_file: str = None) -> pd.DataFrame:
         """載入股價數據"""
-        price_path = Path(price_file)
+        if price_file is None:
+            price_path = get_data_file_path("raw/prices.csv")
+        else:
+            price_path = Path(price_file)
+        
         if not price_path.exists():
-            raise FileNotFoundError(f"找不到股價數據文件: {price_file}")
+            raise FileNotFoundError(f"找不到股價數據文件: {price_path}")
         
         df = pd.read_csv(price_path)
         df['date'] = pd.to_datetime(df['date'])

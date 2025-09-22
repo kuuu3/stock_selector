@@ -13,6 +13,7 @@ sys.path.insert(0, str(src_path))
 from src.data_collection import PriceFetcher
 from src.preprocessing import FeatureEngineer
 from src.models import ModelTrainer, ModelEvaluator
+from src.config import get_data_file_path
 import shutil
 from datetime import datetime
 import logging
@@ -74,7 +75,7 @@ def main():
         
         # 步驟1: 載入現有股價數據
         step_start = time.time()
-        price_csv_path = Path("data/raw/prices.csv")
+        price_csv_path = get_data_file_path("raw/prices.csv")
         
         if not price_csv_path.exists():
             logger.error("找不到股價數據文件，請先運行 fetch_data.py 獲取數據")

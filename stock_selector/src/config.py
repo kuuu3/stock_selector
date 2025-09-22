@@ -24,6 +24,18 @@ RAW_PRICES_FILE = RAW_DATA_DIR / "prices.csv"
 PROCESSED_FEATURES_FILE = PROCESSED_DATA_DIR / "features.npy"
 PROCESSED_LABELS_FILE = PROCESSED_DATA_DIR / "labels.npy"
 
+def get_data_file_path(filename: str) -> Path:
+    """
+    獲取數據文件的絕對路徑，支持從不同目錄運行腳本
+    
+    Args:
+        filename: 相對於 data/ 目錄的文件名，如 "raw/prices.csv"
+        
+    Returns:
+        數據文件的絕對路徑
+    """
+    return PROJECT_ROOT / "data" / filename
+
 # 輸出檔案路徑
 TOP20_OUTPUT_FILE = OUTPUTS_DIR / "top20.csv"
 BACKTEST_REPORT_FILE = OUTPUTS_DIR / "backtest_report.csv"

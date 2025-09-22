@@ -17,6 +17,7 @@ from src.data_collection import PriceFetcher
 from src.preprocessing import FeatureEngineer
 from src.models import StockPredictor
 from src.selection import StockSelector
+from src.config import get_data_file_path
 
 # 設置日誌
 logging.basicConfig(
@@ -38,7 +39,7 @@ def main():
         step_start = time.time()
         logger.info("步驟1: 載入股價數據...")
         
-        price_csv_path = Path("data/raw/prices.csv")
+        price_csv_path = get_data_file_path("raw/prices.csv")
         if not price_csv_path.exists():
             logger.error("找不到股價數據文件，請先運行 fetch_data.py 獲取數據")
             return

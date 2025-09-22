@@ -31,6 +31,9 @@ def test_imports():
         from src.models import StockPredictor
         logger.info("StockPredictor 導入成功")
         
+        from src.config import get_data_file_path
+        logger.info("get_data_file_path 導入成功")
+        
         return True
     except Exception as e:
         logger.error(f"導入失敗: {e}")
@@ -67,7 +70,7 @@ def test_data():
     try:
         logger.info("測試數據文件...")
         
-        price_file = Path("data/raw/prices.csv")
+        price_file = get_data_file_path("raw/prices.csv")
         if not price_file.exists():
             logger.error("找不到數據文件 data/raw/prices.csv")
             return False

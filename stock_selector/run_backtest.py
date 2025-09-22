@@ -11,6 +11,7 @@ src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
 from src.backtest.backtest import Backtester
+from src.config import get_data_file_path
 
 # 設置日誌
 logging.basicConfig(
