@@ -15,7 +15,7 @@ src_path = Path(__file__).parent.parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
 from src.preprocessing import FeatureEngineer
-from src.models import StockPredictor
+from src.models.predict import StockPredictor
 from src.config import BACKTEST_CONFIG, get_data_file_path
 
 logging.basicConfig(
@@ -72,11 +72,32 @@ class Backtester:
     def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """準備特徵數據"""
         logger.info("進行特徵工程...")
+        
+        # 嘗試載入新聞數據
+        news_df = None
+        try:
+            news_csv_path = get_data_file_path("processed/news_with_sentiment.csv")
+            if news_csv_path.exists():
+                news_df = pd.read_csv(news_csv_path)
+                news_df['analyzed_time'] = pd.to_datetime(news_df['analyzed_time'])
+                logger.info(f"載入新聞數據: {len(news_df)} 筆")
+            else:
+                logger.info("找不到新聞情感分析數據，將只使用股價數據")
+        except Exception as e:
+            logger.warning(f"載入新聞數據時發生錯誤: {e}")
+            news_df = None
+        
         feature_engineer = FeatureEngineer()
-        features_df = feature_engineer.create_features(df)
+        features_df = feature_engineer.create_features(df, news_df)
         
         if features_df.empty:
             raise ValueError("特徵工程失敗")
+        
+        # 創建標籤以確保特徵數量一致
+        labels_df = feature_engineer._create_labels(features_df)
+        
+        # 合併特徵和標籤，避免重複列名
+        features_df = features_df.merge(labels_df, on=['stock_code', 'date'], how='left', suffixes=('', '_label'))
         
         logger.info(f"特徵工程完成: {len(features_df)} 個樣本，{len(features_df.columns)} 個特徵")
         return features_df
@@ -85,12 +106,29 @@ class Backtester:
         """獲取預測結果"""
         logger.info("進行模型預測...")
         
-        # 準備預測數據
-        feature_columns = [col for col in features_df.columns
-                          if not col.startswith('label_') and
-                          col not in ['future_return_1w', 'future_return_1m', 'date', 'stock_code']]
+        # 載入訓練時使用的特徵列名
+        try:
+            import joblib
+            feature_columns_path = Path("outputs/models/feature_columns.pkl")
+            if feature_columns_path.exists():
+                feature_columns = joblib.load(feature_columns_path)
+                logger.info(f"載入訓練時特徵列名: {len(feature_columns)} 個")
+            else:
+                raise FileNotFoundError("找不到特徵列名文件")
+        except Exception as e:
+            logger.warning(f"載入特徵列名失敗: {e}，使用預設邏輯")
+            feature_columns = [col for col in features_df.columns 
+                              if col not in ['stock_code', 'date', 'future_return_1w', 'future_return_1m', 'label_1w', 'label_1m'] and 
+                              features_df[col].dtype in ['float64', 'int64']]
         
-        prediction_data = features_df[feature_columns].select_dtypes(include=[np.number]).values
+        # 檢查特徵是否存在
+        missing_features = [col for col in feature_columns if col not in features_df.columns]
+        if missing_features:
+            logger.warning(f"缺少特徵: {missing_features}")
+            # 只使用存在的特徵
+            feature_columns = [col for col in feature_columns if col in features_df.columns]
+        
+        prediction_data = features_df[feature_columns].values
         
         # 進行預測
         classification_results = predictor.predict_classification(prediction_data)

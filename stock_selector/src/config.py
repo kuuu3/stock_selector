@@ -94,8 +94,10 @@ BACKTEST_CONFIG = {
 # 數據收集參數
 DATA_COLLECTION_CONFIG = {
     "NEWS_SOURCES": [
-        "https://news.cnyes.com/",      # 鉅亨網
-        "https://ctee.com.tw/",         # 工商時報
+        "https://tw.news.yahoo.com/finance",  # Yahoo 財經
+        "https://ec.ltn.com.tw/",             # 自由時報財經
+        "https://news.cnyes.com/",            # 鉅亨網
+        "https://ctee.com.tw/",               # 工商時報
     ],
     "STOCK_LIST": [                     # 主要股票代碼列表（已移除無法獲取的股票）
         "2330", "2317", "2454", "6505", "2308",  # 台積電、鴻海、聯發科等

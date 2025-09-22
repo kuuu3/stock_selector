@@ -141,9 +141,100 @@ class FeatureEngineer:
         """創建新聞特徵"""
         result_df = feature_df.copy()
         
-        # 簡化版本：基於日期匹配新聞
-        news_df['date'] = pd.to_datetime(news_df['publish_time']).dt.date
+        # 確保日期格式正確
         feature_df['date'] = pd.to_datetime(feature_df['date']).dt.date
+        
+        # 檢查新聞數據是否包含情感分析結果
+        if 'sentiment' in news_df.columns:
+            logger.info("使用包含情感分析的新聞數據")
+            # 使用情感分析數據
+            result_df = self._create_sentiment_features(result_df, news_df)
+        else:
+            logger.info("使用基礎新聞數據")
+            # 使用基礎新聞數據
+            result_df = self._create_basic_news_features(result_df, news_df)
+        
+        return result_df
+    
+    def _create_sentiment_features(self, feature_df: pd.DataFrame, news_df: pd.DataFrame) -> pd.DataFrame:
+        """創建基於情感分析的新聞特徵"""
+        result_df = feature_df.copy()
+        
+        # 處理新聞數據
+        if 'analyzed_time' in news_df.columns:
+            news_df['date'] = pd.to_datetime(news_df['analyzed_time']).dt.date
+        elif 'scraped_time' in news_df.columns:
+            news_df['date'] = pd.to_datetime(news_df['scraped_time']).dt.date
+        elif 'publish_time' in news_df.columns:
+            news_df['date'] = pd.to_datetime(news_df['publish_time']).dt.date
+        else:
+            logger.error("新聞數據中找不到日期欄位")
+            return result_df
+        
+        # 按日期和股票代碼分組統計
+        daily_news_stats = []
+        
+        for date in feature_df['date'].unique():
+            date_news = news_df[news_df['date'] == date]
+            
+            if not date_news.empty:
+                # 總體新聞統計
+                total_news_count = len(date_news)
+                positive_count = len(date_news[date_news['sentiment'] == 'positive'])
+                negative_count = len(date_news[date_news['sentiment'] == 'negative'])
+                neutral_count = len(date_news[date_news['sentiment'] == 'neutral'])
+                
+                avg_sentiment_score = date_news['sentiment_score'].mean()
+                avg_confidence = date_news['confidence'].mean()
+                
+                daily_news_stats.append({
+                    'date': date,
+                    'news_count': total_news_count,
+                    'positive_news_count': positive_count,
+                    'negative_news_count': negative_count,
+                    'neutral_news_count': neutral_count,
+                    'avg_sentiment_score': avg_sentiment_score,
+                    'avg_confidence': avg_confidence,
+                    'sentiment_ratio': (positive_count - negative_count) / max(total_news_count, 1)
+                })
+        
+        if daily_news_stats:
+            news_stats_df = pd.DataFrame(daily_news_stats)
+            
+            # 合併到特徵數據
+            result_df = result_df.merge(news_stats_df, on='date', how='left')
+            
+            # 填充缺失值
+            news_columns = ['news_count', 'positive_news_count', 'negative_news_count', 
+                          'neutral_news_count', 'avg_sentiment_score', 'avg_confidence', 'sentiment_ratio']
+            for col in news_columns:
+                result_df[col] = result_df[col].fillna(0)
+            
+            # 計算移動平均
+            for col in news_columns:
+                result_df[f'{col}_ma5'] = result_df.groupby('stock_code')[col].rolling(5).mean().reset_index(0, drop=True)
+                result_df[f'{col}_ma20'] = result_df.groupby('stock_code')[col].rolling(20).mean().reset_index(0, drop=True)
+        else:
+            logger.warning("沒有找到匹配的新聞數據")
+            # 添加空的新聞特徵
+            news_columns = ['news_count', 'positive_news_count', 'negative_news_count', 
+                          'neutral_news_count', 'avg_sentiment_score', 'avg_confidence', 'sentiment_ratio']
+            for col in news_columns:
+                result_df[col] = 0
+                result_df[f'{col}_ma5'] = 0
+                result_df[f'{col}_ma20'] = 0
+        
+        return result_df
+    
+    def _create_basic_news_features(self, feature_df: pd.DataFrame, news_df: pd.DataFrame) -> pd.DataFrame:
+        """創建基礎新聞特徵（無情感分析）"""
+        result_df = feature_df.copy()
+        
+        # 處理新聞數據
+        if 'scraped_time' in news_df.columns:
+            news_df['date'] = pd.to_datetime(news_df['scraped_time']).dt.date
+        else:
+            news_df['date'] = pd.to_datetime(news_df['publish_time']).dt.date
         
         # 計算每日新聞數量
         daily_news_count = news_df.groupby('date').size().reset_index(name='news_count')

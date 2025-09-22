@@ -32,8 +32,19 @@ class NewsScraper:
     def __init__(self):
         self.news_sources = DATA_COLLECTION_CONFIG["NEWS_SOURCES"]
         self.session = requests.Session()
+        
+        # 更完整的反反爬蟲設置
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0'
         })
         
     def scrape_cnyes_news(self, pages: int = 5) -> List[Dict]:
@@ -54,13 +65,23 @@ class NewsScraper:
                 url = f"{base_url}/news/cat/headline?page={page}"
                 logger.info(f"正在爬取鉅亨網第 {page} 頁...")
                 
+                # 添加隨機延遲
+                time.sleep(2 + (page % 3))
+                
                 response = self.session.get(url, timeout=API_CONFIG["NEWS_API"]["TIMEOUT"])
                 response.raise_for_status()
                 
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
-                # 查找新聞項目
+                # 查找新聞項目 - 嘗試多種選擇器
                 news_items = soup.find_all('div', class_='_1h45')
+                if not news_items:
+                    # 嘗試其他可能的選擇器
+                    news_items = soup.find_all('div', class_='news-item')
+                    if not news_items:
+                        news_items = soup.find_all('article')
+                        if not news_items:
+                            news_items = soup.find_all('div', class_='item')
                 
                 for item in news_items:
                     try:
@@ -107,6 +128,140 @@ class NewsScraper:
         logger.info(f"鉅亨網共爬取到 {len(news_list)} 則新聞")
         return news_list
     
+    def scrape_yahoo_news(self, pages: int = 5) -> List[Dict]:
+        """
+        爬取 Yahoo 財經新聞
+        
+        Args:
+            pages: 爬取頁數
+            
+        Returns:
+            新聞數據列表
+        """
+        news_list = []
+        base_url = "https://tw.news.yahoo.com"
+        
+        try:
+            for page in range(1, pages + 1):
+                url = f"{base_url}/finance"
+                logger.info(f"正在爬取 Yahoo 財經第 {page} 頁...")
+                
+                # 添加隨機延遲
+                time.sleep(2 + (page % 3))
+                
+                response = self.session.get(url, timeout=API_CONFIG["NEWS_API"]["TIMEOUT"])
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # 查找新聞項目
+                news_items = soup.find_all('h3', class_='Mb(5px)')
+                
+                for item in news_items:
+                    try:
+                        # 提取標題和連結
+                        title_link = item.find('a')
+                        if not title_link:
+                            continue
+                            
+                        title = title_link.get_text(strip=True)
+                        link = title_link.get('href')
+                        
+                        if not title or not link:
+                            continue
+                        
+                        # 補全連結
+                        if link.startswith('/'):
+                            link = base_url + link
+                        
+                        news_list.append({
+                            'title': title,
+                            'link': link,
+                            'source': 'Yahoo財經',
+                            'publish_time': None,  # Yahoo 時間格式較複雜，暫時設為 None
+                            'scraped_time': datetime.now()
+                        })
+                        
+                    except Exception as e:
+                        logger.warning(f"解析新聞項目時發生錯誤: {e}")
+                        continue
+                
+                # 避免請求過於頻繁
+                time.sleep(1)
+                
+        except Exception as e:
+            logger.error(f"爬取 Yahoo 財經新聞時發生錯誤: {e}")
+        
+        logger.info(f"Yahoo 財經共爬取到 {len(news_list)} 則新聞")
+        return news_list
+    
+    def scrape_liberty_news(self, pages: int = 5) -> List[Dict]:
+        """
+        爬取自由時報財經新聞
+        
+        Args:
+            pages: 爬取頁數
+            
+        Returns:
+            新聞數據列表
+        """
+        news_list = []
+        base_url = "https://ec.ltn.com.tw"
+        
+        try:
+            for page in range(1, pages + 1):
+                url = f"{base_url}/"
+                logger.info(f"正在爬取自由時報財經第 {page} 頁...")
+                
+                # 添加隨機延遲
+                time.sleep(2 + (page % 3))
+                
+                response = self.session.get(url, timeout=API_CONFIG["NEWS_API"]["TIMEOUT"])
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # 查找新聞項目
+                news_items = soup.find_all('div', class_='tit')
+                
+                for item in news_items:
+                    try:
+                        # 提取標題和連結
+                        title_link = item.find('a')
+                        if not title_link:
+                            continue
+                            
+                        title = title_link.get_text(strip=True)
+                        link = title_link.get('href')
+                        
+                        if not title or not link:
+                            continue
+                        
+                        # 補全連結
+                        if link.startswith('/'):
+                            link = base_url + link
+                        
+                        news_list.append({
+                            'title': title,
+                            'link': link,
+                            'source': '自由時報',
+                            'publish_time': None,
+                            'scraped_time': datetime.now()
+                        })
+                        
+                    except Exception as e:
+                        logger.warning(f"解析新聞項目時發生錯誤: {e}")
+                        continue
+                
+                # 避免請求過於頻繁
+                time.sleep(1)
+                
+        except Exception as e:
+            logger.error(f"爬取自由時報新聞時發生錯誤: {e}")
+        
+        logger.info(f"自由時報共爬取到 {len(news_list)} 則新聞")
+        return news_list
+
     def scrape_ctee_news(self, pages: int = 5) -> List[Dict]:
         """
         爬取工商時報新聞
@@ -189,6 +344,16 @@ class NewsScraper:
             合併後的新聞數據 DataFrame
         """
         all_news = []
+        
+        # 爬取 Yahoo 財經
+        if "https://tw.news.yahoo.com/finance" in self.news_sources:
+            yahoo_news = self.scrape_yahoo_news(pages_per_source)
+            all_news.extend(yahoo_news)
+        
+        # 爬取自由時報
+        if "https://ec.ltn.com.tw/" in self.news_sources:
+            liberty_news = self.scrape_liberty_news(pages_per_source)
+            all_news.extend(liberty_news)
         
         # 爬取鉅亨網
         if "https://news.cnyes.com/" in self.news_sources:

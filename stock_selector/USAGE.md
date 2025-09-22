@@ -32,40 +32,55 @@ python stock_selector/quick_predict.py
 
 系統會自動處理路徑問題，無論從哪個目錄運行都能正確找到數據文件。
 
-### 1. 數據抓取
+### 1. 數據準備
 ```bash
-# 檢查現有數據
-python fetch_data.py --check
+# 檢查所有數據狀態
+python prepare_data.py --check
 
-# 獲取新數據
-python fetch_data.py
+# 獲取所有數據（股價 + 新聞 + 情感分析）
+python prepare_data.py
 
-# 強制重新獲取數據
-python fetch_data.py --force
+# 只獲取股價數據
+python prepare_data.py --prices-only
+
+# 只獲取新聞數據
+python prepare_data.py --news-only
+
+# 跳過新聞數據處理
+python prepare_data.py --no-news
+
+# 強制重新獲取所有數據
+python prepare_data.py --force
+
+# 指定新聞抓取頁數
+python prepare_data.py --pages 5
 ```
 
 ### 2. 模型訓練
 ```bash
 # 完整訓練模型（從頭開始）
-python train_model.py
+python train.py --mode full
 
 # 繼續訓練（基於現有模型微調）
-python continue_train.py
-
-# 列出所有可用的 checkpoint
-python continue_train.py --list
+python train.py --mode continue
 
 # 使用指定的 checkpoint 進行訓練
-python continue_train.py --checkpoint 2024-05-31_14-30-25
+python train.py --mode continue --checkpoint 2024-05-31_14-30-25
+
+# 列出所有可用的 checkpoint
+python train.py --list
 ```
 
 ### 3. 股票預測
 ```bash
 # 快速預測（使用現有數據）
-python quick_predict.py
+python predict.py --mode quick
 
 # 完整預測（包含數據獲取）
-python predict_stocks.py
+python predict.py --mode full
+
+# 指定選股數量
+python predict.py --top-n 10
 ```
 
 ### 4. 回測系統
