@@ -51,9 +51,8 @@ class PriceFetcher:
             # 獲取歷史數據 - 修復 twstock API 調用
             import datetime
             end_date = datetime.datetime.now()
-            # 限制回看天數為最近6個月，減少請求量
-            limited_days = min(days, 180)  # 最多6個月
-            start_date = end_date - datetime.timedelta(days=limited_days)
+            # 使用傳入的 days 參數，不強制限制
+            start_date = end_date - datetime.timedelta(days=days)
             
             # 收集多個月的數據
             all_data = []
@@ -196,7 +195,7 @@ class PriceFetcher:
             logger.info(f"正在獲取股票 {stock_code} ({i+1}/{len(self.stock_list)}) - 進度: {i/len(self.stock_list)*100:.1f}%")
             
             try:
-                df = self.fetch_stock_data(stock_code)
+                df = self.fetch_stock_data(stock_code, self.lookback_days)
                 if not df.empty:
                     all_data.append(df)
                     logger.info(f"  ✓ 成功獲取 {len(df)} 筆數據")
