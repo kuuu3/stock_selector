@@ -125,6 +125,9 @@ class PriceFetcher:
             logger.info("沒有現有數據，將獲取完整數據")
             return self.fetch_all_stocks(save_to_file=False)
         
+        # 確保數據類型一致性
+        existing_df['stock_code'] = existing_df['stock_code'].astype(str)
+        
         # 找到最新日期
         latest_date = existing_df['date'].max()
         logger.info(f"現有數據最新日期: {latest_date.strftime('%Y-%m-%d')}")
