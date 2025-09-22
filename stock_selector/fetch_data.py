@@ -14,6 +14,7 @@ src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
 from src.data_collection import PriceFetcher
+from src.config import RAW_PRICES_FILE
 
 # 設置日誌
 logging.basicConfig(
