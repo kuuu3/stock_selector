@@ -351,21 +351,32 @@ class FeatureEngineer:
         
         return {'dif': dif, 'dem': dem, 'osc': osc}
     
-    def save_features(self, df: pd.DataFrame):
-        """保存特徵和標籤"""
-        # 分離特徵和標籤
-        feature_columns = [col for col in df.columns if not col.startswith('label_') and col not in ['future_return_1w', 'future_return_1m']]
-        label_columns = ['label_1w', 'label_1m', 'future_return_1w', 'future_return_1m']
+    def save_features(self, features_df: pd.DataFrame, labels_df: pd.DataFrame = None):
+        """
+        保存特徵和標籤
         
-        features = df[feature_columns]
-        labels = df[label_columns]
-        
-        # 保存為numpy格式
-        np.save(PROCESSED_FEATURES_FILE, features.values)
-        np.save(PROCESSED_LABELS_FILE, labels.values)
-        
+        Args:
+            features_df: 特徵數據框（不包含標籤）
+            labels_df: 標籤數據框（可選）
+        """
+        # 保存特徵
+        np.save(PROCESSED_FEATURES_FILE, features_df.values)
         logger.info(f"特徵已保存到 {PROCESSED_FEATURES_FILE}")
-        logger.info(f"標籤已保存到 {PROCESSED_LABELS_FILE}")
+        
+        # 如果有標籤數據，也保存標籤
+        if labels_df is not None:
+            # 只保存標籤相關欄位
+            label_columns = ['future_return_1w', 'future_return_1m', 'label_1w', 'label_1m']
+            available_label_columns = [col for col in label_columns if col in labels_df.columns]
+            
+            if available_label_columns:
+                labels = labels_df[available_label_columns]
+                np.save(PROCESSED_LABELS_FILE, labels.values)
+                logger.info(f"標籤已保存到 {PROCESSED_LABELS_FILE}")
+            else:
+                logger.warning("沒有找到可用的標籤欄位")
+        else:
+            logger.info("未提供標籤數據，只保存特徵")
 
 
 def main():
