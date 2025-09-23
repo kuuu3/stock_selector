@@ -115,9 +115,10 @@ def quick_predict():
         predictor = StockPredictor()
         predictor.load_models()
         
-        # 準備預測數據
+        # 準備預測數據（排除標籤欄位）
+        label_columns = ['future_return_1w', 'future_return_1m', 'label_1w', 'label_1m']
         feature_columns = [col for col in features_df.columns 
-                          if col not in ['stock_code', 'date'] and 
+                          if col not in ['stock_code', 'date'] + label_columns and 
                           features_df[col].dtype in ['float64', 'int64']]
         features_array = features_df[feature_columns].values
         stock_codes = features_df['stock_code'].tolist()

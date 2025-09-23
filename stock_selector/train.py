@@ -121,17 +121,18 @@ class UnifiedTrainer:
         logger.info("步驟4: 開始訓練模型...")
         
         try:
-            # 分離特徵和標籤
-            labels_df = self.feature_engineer._create_labels(features_df)
+            # 創建標籤數據
+            labels_df = self.feature_engineer.create_labels(price_df)
             
             # 使用1週標籤進行訓練
             valid_mask = ~(labels_df['label_1w'].isna())
             features_clean = features_df[valid_mask].copy()
             labels_clean = labels_df[valid_mask].copy()
             
-            # 移除日期和股票代碼欄位，只保留數值特徵
+            # 移除日期和股票代碼欄位，只保留數值特徵（排除標籤欄位）
+            label_columns = ['future_return_1w', 'future_return_1m', 'label_1w', 'label_1m']
             feature_columns = [col for col in features_clean.columns 
-                             if col not in ['stock_code', 'date'] and 
+                             if col not in ['stock_code', 'date'] + label_columns and 
                              features_clean[col].dtype in ['float64', 'int64']]
             features_clean = features_clean[feature_columns]
             
@@ -314,17 +315,18 @@ class UnifiedTrainer:
         logger.info("步驟5: 進行增量訓練...")
         
         try:
-            # 分離特徵和標籤
-            labels_df = self.feature_engineer._create_labels(features_df)
+            # 創建標籤數據
+            labels_df = self.feature_engineer.create_labels(price_df)
             
             # 使用1週標籤進行訓練
             valid_mask = ~(labels_df['label_1w'].isna())
             features_clean = features_df[valid_mask].copy()
             labels_clean = labels_df[valid_mask].copy()
             
-            # 只保留數值特徵
+            # 只保留數值特徵（排除標籤欄位）
+            label_columns = ['future_return_1w', 'future_return_1m', 'label_1w', 'label_1m']
             feature_columns = [col for col in features_clean.columns 
-                             if col not in ['stock_code', 'date'] and 
+                             if col not in ['stock_code', 'date'] + label_columns and 
                              features_clean[col].dtype in ['float64', 'int64']]
             features_clean = features_clean[feature_columns]
             

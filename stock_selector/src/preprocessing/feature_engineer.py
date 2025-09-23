@@ -29,14 +29,14 @@ class FeatureEngineer:
     
     def create_features(self, price_df: pd.DataFrame, news_df: pd.DataFrame = None) -> pd.DataFrame:
         """
-        創建特徵矩陣
+        創建特徵矩陣（不包含標籤）
         
         Args:
             price_df: 股價數據
             news_df: 新聞數據（可選）
             
         Returns:
-            特徵矩陣 DataFrame
+            特徵矩陣 DataFrame（不包含標籤欄位）
         """
         logger.info("開始創建特徵...")
         
@@ -50,15 +50,38 @@ class FeatureEngineer:
         if news_df is not None and not news_df.empty:
             feature_df = self._create_news_features(feature_df, news_df)
         
-        # 創建標籤
-        feature_df = self._create_labels(feature_df)
-        
         # 清理數據
         feature_df = self._clean_features(feature_df)
         
         logger.info(f"特徵創建完成，共 {len(feature_df)} 筆樣本，{len(feature_df.columns)} 個特徵")
         
         return feature_df
+    
+    def create_labels(self, price_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        創建標籤數據
+        
+        Args:
+            price_df: 股價數據
+            
+        Returns:
+            標籤 DataFrame
+        """
+        logger.info("開始創建標籤...")
+        
+        # 創建基礎特徵用於計算標籤
+        base_df = self._create_technical_features(price_df)
+        
+        # 創建標籤
+        labels_df = self._create_labels(base_df)
+        
+        # 只保留標籤相關欄位
+        label_columns = ['stock_code', 'date', 'future_return_1w', 'future_return_1m', 'label_1w', 'label_1m']
+        labels_df = labels_df[label_columns]
+        
+        logger.info(f"標籤創建完成，共 {len(labels_df)} 筆樣本")
+        
+        return labels_df
     
     def _create_technical_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """創建技術指標特徵"""

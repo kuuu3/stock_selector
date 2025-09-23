@@ -93,8 +93,8 @@ class Backtester:
         if features_df.empty:
             raise ValueError("特徵工程失敗")
         
-        # 創建標籤以確保特徵數量一致
-        labels_df = feature_engineer._create_labels(features_df)
+        # 創建標籤數據
+        labels_df = feature_engineer.create_labels(df)
         
         # 合併特徵和標籤，避免重複列名
         features_df = features_df.merge(labels_df, on=['stock_code', 'date'], how='left', suffixes=('', '_label'))
