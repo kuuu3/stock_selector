@@ -313,8 +313,8 @@ class FeatureEngineer:
         df = df.dropna(subset=key_features, how='all')  # 只要不是所有關鍵特徵都是NaN就保留
         logger.info(f"移除關鍵特徵全為NaN後: {len(df)}")
         
-        # 用前向填充和0填充處理其他NaN
-        df = df.ffill().fillna(0)
+        # 按股票代碼分組進行前向填充，避免跨股票數據洩漏
+        df = df.groupby('stock_code').ffill().fillna(0)
         logger.info(f"填充NaN後: {len(df)}")
         
         # 移除極端值（更寬鬆的處理）

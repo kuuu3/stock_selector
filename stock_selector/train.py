@@ -172,11 +172,19 @@ class UnifiedTrainer:
             models_dir = Path("outputs/models")
             models_dir.mkdir(parents=True, exist_ok=True)
             
-            # 保存模型
-            for model_name, model in trained_models.items():
-                model_path = models_dir / f"{model_name}_model.pkl"
-                joblib.dump(model, model_path)
-                logger.info(f"保存模型: {model_path}")
+            # 保存模型（從評估字典中提取實際模型）
+            for model_name, model_result in trained_models.items():
+                if isinstance(model_result, dict) and 'model' in model_result:
+                    # 從評估字典中提取實際模型
+                    actual_model = model_result['model']
+                    model_path = models_dir / f"{model_name}_model.pkl"
+                    joblib.dump(actual_model, model_path)
+                    logger.info(f"保存模型: {model_path}")
+                else:
+                    # 如果直接是模型對象
+                    model_path = models_dir / f"{model_name}_model.pkl"
+                    joblib.dump(model_result, model_path)
+                    logger.info(f"保存模型: {model_path}")
             
             # 保存特徵列名
             feature_columns_path = models_dir / "feature_columns.pkl"
@@ -382,10 +390,18 @@ class UnifiedTrainer:
             models_path = new_checkpoint_path / "models"
             models_path.mkdir(parents=True, exist_ok=True)
             
-            for model_name, model in updated_models.items():
-                model_file = models_path / f"{model_name}_model.pkl"
-                joblib.dump(model, model_file)
-                logger.info(f"保存更新後的模型: {model_file}")
+            for model_name, model_result in updated_models.items():
+                if isinstance(model_result, dict) and 'model' in model_result:
+                    # 從評估字典中提取實際模型
+                    actual_model = model_result['model']
+                    model_file = models_path / f"{model_name}_model.pkl"
+                    joblib.dump(actual_model, model_file)
+                    logger.info(f"保存更新後的模型: {model_file}")
+                else:
+                    # 如果直接是模型對象
+                    model_file = models_path / f"{model_name}_model.pkl"
+                    joblib.dump(model_result, model_file)
+                    logger.info(f"保存更新後的模型: {model_file}")
             
             # 保存特徵列名
             feature_columns_path = models_path / "feature_columns.pkl"

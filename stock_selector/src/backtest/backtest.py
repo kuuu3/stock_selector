@@ -93,6 +93,14 @@ class Backtester:
         if features_df.empty:
             raise ValueError("特徵工程失敗")
         
+        # 確保保留 stock_code 和 date 欄位
+        if 'stock_code' not in features_df.columns:
+            # 如果特徵工程過程中丟失了 stock_code，從原始數據中恢復
+            features_df = features_df.reset_index(drop=True)
+            df_reset = df.reset_index(drop=True)
+            features_df['stock_code'] = df_reset['stock_code']
+            features_df['date'] = df_reset['date']
+        
         # 創建標籤數據
         labels_df = feature_engineer.create_labels(df)
         
