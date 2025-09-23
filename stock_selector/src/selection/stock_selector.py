@@ -251,13 +251,16 @@ class StockSelector:
             # 使用預設的完整路徑
             output_path = TOP20_OUTPUT_FILE
         else:
-            # 如果提供檔案名，檢查是否已經是完整路徑
-            if str(filename).startswith('outputs/'):
+            # 將 filename 轉換為 Path 對象
+            filename_path = Path(filename)
+            
+            # 檢查是否已經是完整路徑（包含 outputs 目錄）
+            if str(filename_path).startswith('outputs/') or filename_path.is_absolute():
                 # 如果已經是完整路徑，直接使用
-                output_path = Path(filename)
+                output_path = filename_path
             else:
                 # 如果只是檔案名，則組合路徑
-                output_path = OUTPUTS_DIR / filename
+                output_path = OUTPUTS_DIR / filename_path
         
         # 確保輸出目錄存在
         output_path.parent.mkdir(parents=True, exist_ok=True)

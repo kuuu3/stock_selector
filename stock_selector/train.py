@@ -340,12 +340,13 @@ class UnifiedTrainer:
             
             # 轉換為 numpy 數組
             features_array = features_clean.values
-            # 準備標籤數組：包含分類標籤和回歸標籤
-            labels_array = np.column_stack([
-                labels_clean['label_1w'].values,  # 分類標籤
-                labels_clean['future_return_1w'].values,  # 回歸標籤
-                labels_clean['future_return_1w'].values   # 重複作為第三列
-            ])
+            
+            # 準備分類和回歸標籤
+            y_classification = labels_clean['label_1w'].values
+            y_regression = labels_clean['future_return_1w'].values
+            
+            # 將分類標籤從 [-1, 0, 1] 轉換為 [0, 1, 2] 以符合 XGBoost 要求
+            y_classification_adjusted = y_classification + 1  # [-1, 0, 1] -> [0, 1, 2]
             
             # 增量訓練
             updated_models = {}
@@ -356,9 +357,15 @@ class UnifiedTrainer:
                         original_lr = model.learning_rate
                         model.learning_rate = original_lr * 0.1  # 降低學習率
                     
-                    # 進行增量訓練
+                    # 根據模型類型使用正確的標籤
                     if hasattr(model, 'fit'):
-                        model.fit(features_array, labels_array)
+                        if 'regressor' in model_name:
+                            # 回歸模型使用回歸標籤
+                            model.fit(features_array, y_regression)
+                        else:
+                            # 分類模型使用分類標籤
+                            model.fit(features_array, y_classification_adjusted)
+                        
                         updated_models[model_name] = model
                         logger.info(f"增量訓練完成: {model_name}")
                     else:
