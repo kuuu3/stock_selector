@@ -101,12 +101,13 @@ DATA_COLLECTION_CONFIG = {
     ],
     "STOCK_LIST": [                     # 主要股票代碼列表（已移除無法獲取的股票）
         "2330", "2317", "2454", "6505", "2308",  # 台積電、鴻海、聯發科等
-        "2881", "2882", "2886", "2891", "2892",  # 富邦金、國泰金等
+        "3535", "5443", "2363", "2344", "2481",
+        "3260", "2408", "3324", "6449", "5469",
         "5284", "3704", "1560", "1316",          # 其他股票（移除5475）
-        "2481", "8039", "3563", "2630",          # 其他股票（移除6761）
+        "8039", "3563", "2630",                  # 其他股票（移除6761）
         "3019", "3311", "8021", "2476",          # 其他股票（移除8027）
         "4976", "2231", "8033", "2429",          # 其他股票（移除5498）
-        "4414", "6235", "1504", "2408",          # 其他股票
+        "4414", "6235", "1504",                  # 其他股票
         "1445",                                  # 其他股票（移除8111, 3323, 6143）
         "3059", "2614",                          # 其他股票（移除2641, 3624, 6510）
         "2449",                                  # 其他股票
@@ -119,6 +120,63 @@ NEWS_PROCESSING_CONFIG = {
     "MAX_NEWS_LENGTH": 512,            # 新聞最大長度
     "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
     "SENTIMENT_MODEL": "nlptown/bert-base-multilingual-uncased-sentiment",
+}
+
+# 增強版新聞爬蟲配置
+ENHANCED_NEWS_CONFIG = {
+    "SCRAPING": {
+        "MAX_RETRIES": 3,              # 最大重試次數
+        "RETRY_DELAY": 2,              # 重試延遲（秒）
+        "MIN_DELAY": 1.0,              # 最小隨機延遲（秒）
+        "MAX_DELAY": 4.0,              # 最大隨機延遲（秒）
+        "TIMEOUT": 30,                 # 請求超時（秒）
+        "MAX_WORKERS": 5,              # 並行工作線程數
+        "USE_API_FIRST": True,         # 優先使用 API
+        "FETCH_CONTENT": True,         # 是否抓取詳細內容
+        "DEDUPLICATION": True,         # 是否去重
+    },
+    "API_ENDPOINTS": {
+        "YAHOO_FINANCE": "https://query1.finance.yahoo.com/v1/finance/search",
+        "CNYES": "https://news.cnyes.com/api/v3/news",
+    },
+    "SELECTORS": {
+        "CNYES": {
+            "ARTICLE_LIST": ["div._1h45", "div[class*=\"item\"]", "div[class*=\"news\"]", "article", "div.post-item"],
+            "TITLE": ["h3", "h2", ".title", "a[title]"],
+            "CONTENT": ["div.article-content", "div.post-content", "div.content", "article .content", "div[class*=\"article\"]"],
+            "TIME": [".date", ".time", "time", "[datetime]"],
+        },
+        "YAHOO": {
+            "ARTICLE_LIST": ["div[data-module=\"Stream\"] > ul > li", "li[class*=\"stream-item\"]", "article"],
+            "TITLE": ["h3 a", "h2 a", "a[data-test-locator=\"headline\"]"],
+            "CONTENT": ["div.caas-body", "div.article-content", "div.content", "article .content"],
+            "TIME": ["time", ".date", "[datetime]"],
+        },
+        "CTEE": {
+            "ARTICLE_LIST": [".post-item", ".news-item", "article"],
+            "TITLE": ["h3 a", "h2 a", ".title a"],
+            "CONTENT": ["div.entry-content", "div.post-content", "div.content", "article .content"],
+            "TIME": [".date", "time", "[datetime]"],
+        },
+        "LTN": {
+            "ARTICLE_LIST": [".listphoto", ".list", ".news-item"],
+            "TITLE": ["h3 a", "h2 a", ".title a"],
+            "CONTENT": ["div.text", "div.article-content", "div.content", "article .content"],
+            "TIME": [".time", ".date", "time"],
+        },
+    },
+    "NLP": {
+        "ENABLE_SEGMENTATION": True,   # 是否啟用斷詞
+        "REMOVE_STOPWORDS": True,      # 是否移除停用詞
+        "MIN_WORD_LENGTH": 2,          # 最小詞長
+        "CUSTOM_STOPWORDS": [          # 自定義停用詞
+            "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一個",
+            "上", "也", "很", "到", "說", "要", "去", "你", "會", "著", "沒有", "看", "好",
+            "自己", "這", "那", "他", "她", "它", "們", "我們", "你們", "他們", "這個",
+            "那個", "什麼", "怎麼", "為什麼", "因為", "所以", "但是", "如果", "雖然",
+            "然後", "而且", "或者", "不過", "可是", "只是", "就是", "就是說"
+        ],
+    },
 }
 
 # 特徵工程參數

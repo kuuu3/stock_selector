@@ -4,7 +4,12 @@
 """
 
 import pandas as pd
-import jieba
+# 可選依賴
+try:
+    import jieba
+    JIEBA_AVAILABLE = True
+except ImportError:
+    JIEBA_AVAILABLE = False
 import re
 from typing import List, Dict
 import logging

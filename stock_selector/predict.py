@@ -91,13 +91,10 @@ def quick_predict():
             logger.error("特徵工程失敗")
             return
         
-        # 確保保留 stock_code 和 date 欄位
+        # 檢查是否成功保留 stock_code 欄位
         if 'stock_code' not in features_df.columns:
-            # 如果特徵工程過程中丟失了 stock_code，從原始數據中恢復
-            features_df = features_df.reset_index(drop=True)
-            price_df_reset = price_df.reset_index(drop=True)
-            features_df['stock_code'] = price_df_reset['stock_code']
-            features_df['date'] = price_df_reset['date']
+            logger.error("特徵工程失敗：缺少 stock_code 欄位")
+            return
         
         logger.info(f"特徵工程完成，生成 {len(features_df)} 個樣本")
         

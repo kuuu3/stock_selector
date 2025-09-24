@@ -53,6 +53,19 @@ class FeatureEngineer:
         # 清理數據
         feature_df = self._clean_features(feature_df)
         
+        # 確保保留 stock_code 和 date 欄位
+        if 'stock_code' not in feature_df.columns:
+            logger.warning("特徵工程過程中丟失了 stock_code 欄位，嘗試恢復...")
+            # 從原始數據中恢復 stock_code
+            feature_df = feature_df.reset_index(drop=True)
+            price_df_reset = price_df.reset_index(drop=True)
+            if len(feature_df) == len(price_df_reset):
+                feature_df['stock_code'] = price_df_reset['stock_code']
+                feature_df['date'] = price_df_reset['date']
+                logger.info("成功恢復 stock_code 和 date 欄位")
+            else:
+                logger.error(f"數據長度不匹配，無法恢復 stock_code: {len(feature_df)} vs {len(price_df_reset)}")
+        
         logger.info(f"特徵創建完成，共 {len(feature_df)} 筆樣本，{len(feature_df.columns)} 個特徵")
         
         return feature_df

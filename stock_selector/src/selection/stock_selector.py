@@ -186,8 +186,19 @@ class StockSelector:
         # 風險調整評分
         risk_adjusted_data = self.calculate_risk_adjusted_score(diversified_data)
         
+        # 去重：每支股票只保留評分最高的樣本
+        if 'stock_code' in risk_adjusted_data.columns:
+            # 按股票代碼分組，保留每支股票評分最高的樣本
+            deduplicated_data = risk_adjusted_data.loc[
+                risk_adjusted_data.groupby('stock_code')['final_score'].idxmax()
+            ].reset_index(drop=True)
+            logger.info(f"去重後剩餘 {len(deduplicated_data)} 支唯一股票")
+        else:
+            deduplicated_data = risk_adjusted_data
+            logger.warning("沒有 stock_code 欄位，無法去重")
+        
         # 排序
-        ranked_data = self.rank_stocks(risk_adjusted_data)
+        ranked_data = self.rank_stocks(deduplicated_data)
         
         # 選擇前N支
         top_stocks = ranked_data.head(top_n)

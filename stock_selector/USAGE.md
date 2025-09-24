@@ -10,6 +10,18 @@
 prepare_data  train.py   predict.py  run_backtest.py
 ```
 
+## 新聞爬蟲系統
+
+系統已整合統一新聞爬蟲，具備以下特性：
+
+### 統一新聞爬蟲
+- **API優先策略** - 優先使用鉅亨網API和Yahoo RSS
+- **快速穩定** - 專注於最穩定的數據源，避免HTML解析問題
+- **完整內容** - 鉅亨網API提供完整新聞內容，Yahoo RSS提供部分內容
+- **智能去重** - 基於標題自動去重
+- **多源整合** - 同時爬取鉅亨網、Yahoo財經、中央社三個新聞源
+- **高效爬取** - 快速獲取新聞，避免長時間等待
+
 ## 快速開始
 
 ### 運行方式
@@ -32,16 +44,16 @@ python stock_selector/predict.py --mode quick
 
 ### 1. 數據準備
 ```bash
-# 檢查所有數據狀態
+# 檢查系統狀態和數據完整性
 python prepare_data.py --check
 
-# 獲取所有數據（股價 + 新聞 + 情感分析）
+# 獲取所有數據（股價 + 新聞）
 python prepare_data.py
 
 # 只獲取股價數據
 python prepare_data.py --prices-only
 
-# 只獲取新聞數據
+# 只獲取新聞數據（使用統一新聞爬蟲）
 python prepare_data.py --news-only
 
 # 跳過新聞數據處理
@@ -50,8 +62,33 @@ python prepare_data.py --no-news
 # 強制重新獲取所有數據
 python prepare_data.py --force
 
+# 使用API獲取股價數據
+python prepare_data.py --use-api
+```
+
+### 新聞預處理
+```bash
+# 處理新聞情感分析（使用預設文件）
+python process_news.py
+
+# 指定輸入文件
+python process_news.py --input data/raw/unified_news.csv
+
+# 指定輸出文件
+python process_news.py --output data/processed/custom_news.csv
+
+# 強制重新處理，覆蓋現有文件
+python process_news.py --force
+```
+
+# 快速新聞爬取（僅中央社）
+python quick_news_scraper.py
+
 # 指定新聞抓取頁數
 python prepare_data.py --pages 5
+
+# 系統狀態檢查
+python system_status.py
 ```
 
 ### 2. 模型訓練
@@ -318,6 +355,66 @@ python predict.py --mode quick
 5. **標籤配置問題**
    - 回歸模型現在使用1個月前向報酬
    - 保留1週報酬作為元數據
+
+6. **增強版新聞爬蟲**
+   - 整合了智能重試機制
+   - 支持多新聞源並行爬取
+   - 實現了文本預處理功能
+   - 添加了配置化管理系統
+
+## 新聞爬蟲故障排除
+
+### 常見問題
+
+1. **403 Forbidden 錯誤**
+   ```
+   問題：網站拒絕訪問
+   解決：使用快速新聞爬取腳本
+   python quick_news_scraper.py
+   ```
+
+2. **新聞爬取速度慢**
+   ```
+   問題：網站反爬蟲機制導致延遲
+   解決：減少爬取頁數或使用單一新聞源
+   python prepare_data.py --pages 1
+   ```
+
+3. **選擇器失效**
+   ```
+   問題：網站結構改變導致選擇器失效
+   解決：增強版爬蟲會自動嘗試多個選擇器
+   ```
+
+4. **依賴問題**
+   ```
+   問題：缺少 jieba 或 aiohttp
+   解決：安裝依賴或使用降級模式
+   pip install jieba aiohttp
+   ```
+
+### 新聞源狀態
+
+- ✅ **鉅亨網API** - 最穩定，提供完整內容，推薦使用
+- ✅ **Yahoo RSS** - 穩定，提供部分內容，推薦使用
+- ✅ **中央社** - 可用，快速模式僅獲取標題
+- ⚠️ **工商時報** - 被Cloudflare阻擋，暫時禁用
+- ❌ **Yahoo財經HTML** - 網站問題（502錯誤），已改用RSS
+
+### 替代方案
+
+1. **統一新聞爬取（推薦）**
+   ```bash
+   python prepare_data.py --news-only
+   ```
+
+2. **手動新聞數據**
+   - 可以手動下載新聞CSV文件
+   - 放置在 `data/raw/` 目錄下
+
+3. **RSS Feeds**
+   - 考慮使用RSS作為替代數據源
+   - 更穩定且不易被封鎖
 
 ### 系統架構改進
 - **統一腳本**: 整合了多個分散的腳本

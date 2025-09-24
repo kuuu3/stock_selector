@@ -99,7 +99,9 @@ class ModelTrainer:
         
         # 分離特徵和標籤
         y_classification = labels[:, 0]  # 分類標籤 (label_1w)
-        y_regression = labels[:, 2] if labels.shape[1] > 2 else labels[:, 0]  # 回歸標籤
+        y_regression_1w = labels[:, 1] if labels.shape[1] > 1 else labels[:, 0]  # 1週回歸標籤
+        y_regression_1m = labels[:, 2] if labels.shape[1] > 2 else labels[:, 0]  # 1個月回歸標籤
+        y_regression = y_regression_1m  # 使用1個月回歸標籤作為主要回歸標籤
         
         # 將分類標籤從 [-1, 0, 1] 轉換為 [0, 1, 2] 以符合 XGBoost 要求
         y_classification = y_classification + 1  # [-1, 0, 1] -> [0, 1, 2]
@@ -110,7 +112,7 @@ class ModelTrainer:
         y_classification = y_classification[valid_mask]
         y_regression = y_regression[valid_mask]
         
-        logger.info(f"清理後數據: X形狀 {X.shape}, y分類 {y_classification.shape}, y回歸 {y_regression.shape}")
+        logger.info(f"清理後數據: X形狀 {X.shape}, y分類 {y_classification.shape}, y回歸(1個月) {y_regression.shape}")
         
         # 時間序列分割（避免未來資訊洩漏）
         tscv = TimeSeriesSplit(n_splits=5)
@@ -248,7 +250,7 @@ class ModelTrainer:
         Returns:
             模型評估結果
         """
-        logger.info("開始訓練 XGBoost Regressor 模型...")
+        logger.info("開始訓練 XGBoost Regressor 模型 (使用1個月回歸標籤)...")
         
         # 訓練模型
         model_params = {
@@ -280,7 +282,7 @@ class ModelTrainer:
         rmse = np.sqrt(mse)
         mae = np.mean(np.abs(data['y_test_reg'] - y_pred))
         
-        logger.info(f"XGBoost Regressor RMSE: {rmse:.4f}, MAE: {mae:.4f}")
+        logger.info(f"XGBoost Regressor (1個月回歸) RMSE: {rmse:.4f}, MAE: {mae:.4f}")
         
         # 保存模型
         self.models['xgboost_regressor'] = model

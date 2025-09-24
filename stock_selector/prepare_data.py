@@ -16,6 +16,7 @@ src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
 from src.data_collection import PriceFetcher
+from src.data_collection.api_fetcher import APIFetcher
 from src.data_collection.news_scraper import NewsScraper
 from src.preprocessing.sentiment_analyzer import SentimentAnalyzer
 from src.config import RAW_PRICES_FILE, RAW_NEWS_FILE, get_data_file_path
@@ -108,36 +109,88 @@ def check_price_data():
         return None, None
 
 
-def fetch_price_data(force_refresh=False):
+def fetch_price_data(force_refresh=False, use_api=False):
     """獲取股價數據"""
     logger.info("=== 開始獲取股票數據 ===")
     existing_df, latest_date = check_price_data()
+    
+    # 檢查是否有缺失的股票（無論數據年齡）
     if existing_df is not None and not force_refresh:
-        days_old = (datetime.now() - latest_date).days
-        if days_old <= 1:
-            logger.info("股價數據已是最新，無需更新")
-            return existing_df
-        elif days_old <= 3:
-            logger.info(f"股價數據較舊 ({days_old} 天)，建議更新")
+        from src.config import DATA_COLLECTION_CONFIG
+        existing_stocks = set(existing_df['stock_code'].astype(str).unique())
+        all_stocks = set(DATA_COLLECTION_CONFIG["STOCK_LIST"])
+        missing_stocks = all_stocks - existing_stocks
+        
+        if missing_stocks:
+            logger.info(f"發現 {len(missing_stocks)} 支股票缺失數據: {sorted(missing_stocks)}")
         else:
-            logger.info(f"股價數據過舊 ({days_old} 天)，正在更新...")
+            days_old = (datetime.now() - latest_date).days
+            if days_old <= 1:
+                logger.info("股價數據已是最新，無需更新")
+                return existing_df
+            elif days_old <= 3:
+                logger.info(f"股價數據較舊 ({days_old} 天)，建議更新")
+            else:
+                logger.info(f"股價數據過舊 ({days_old} 天)，正在更新...")
     try:
+        # 首先嘗試使用 twstock，如果失敗則使用 API
         price_fetcher = PriceFetcher()
+        api_fetcher = APIFetcher()
+        
         if force_refresh:
             logger.info("強制刷新模式：重新獲取所有股價數據")
-            new_df = price_fetcher.fetch_all_stocks(save_to_file=True)
-        else:
-            logger.info("增量更新模式：只獲取缺失的股價數據")
-            new_data = price_fetcher.fetch_incremental_data(existing_df)
-            if new_data.empty:
-                logger.info("沒有新股價數據需要更新")
-                return existing_df
-            if existing_df is None or existing_df.empty:
-                logger.info("Cold-start：使用完整的新股價數據")
-                new_df = new_data
+            
+            if use_api:
+                logger.info("使用 API 獲取數據...")
+                new_df = api_fetcher.fetch_all_stocks(force_refresh=True)
+                if not new_df.empty:
+                    logger.info("API 獲取數據成功")
+                else:
+                    logger.error("API 無法獲取數據")
             else:
-                new_df = pd.concat([existing_df, new_data], ignore_index=True)
-                new_df = new_df.sort_values(['stock_code', 'date']).reset_index(drop=True)
+                # 先嘗試 twstock
+                logger.info("嘗試使用 twstock 獲取數據...")
+                new_df = price_fetcher.fetch_all_stocks(save_to_file=False)
+                
+                if new_df.empty or len(new_df['stock_code'].unique()) < len(price_fetcher.stock_list) * 0.8:
+                    logger.warning("twstock 獲取數據不完整，嘗試使用 API...")
+                    api_df = api_fetcher.fetch_all_stocks(force_refresh=True)
+                    if not api_df.empty:
+                        new_df = api_df
+                        logger.info("使用 API 成功獲取數據")
+                    else:
+                        logger.error("API 也無法獲取數據")
+                else:
+                    logger.info("twstock 獲取數據成功")
+        else:
+            logger.info("增量更新模式：檢查缺失的股價數據")
+            
+            if use_api:
+                # 使用 API 進行增量更新
+                new_df = api_fetcher.fetch_missing_stocks(existing_df)
+                if new_df.empty:
+                    logger.info("沒有新股價數據需要更新")
+                    return existing_df
+                if existing_df is None or existing_df.empty:
+                    logger.info("Cold-start：使用完整的新股價數據")
+                else:
+                    new_df = pd.concat([existing_df, new_df], ignore_index=True)
+                    new_df = new_df.sort_values(['stock_code', 'date']).reset_index(drop=True)
+            else:
+                # 使用 twstock 進行增量更新
+                new_data = price_fetcher.fetch_incremental_data(existing_df)
+                if new_data.empty:
+                    logger.info("沒有新股價數據需要更新")
+                    return existing_df
+                if existing_df is None or existing_df.empty:
+                    logger.info("Cold-start：使用完整的新股價數據")
+                    new_df = new_data
+                else:
+                    new_df = pd.concat([existing_df, new_data], ignore_index=True)
+                    new_df = new_df.sort_values(['stock_code', 'date']).reset_index(drop=True)
+            
+        # 保存數據
+        if not new_df.empty:
             new_df.to_csv(RAW_PRICES_FILE, index=False)
             logger.info(f"股價數據已保存到: {RAW_PRICES_FILE}")
         if new_df.empty:
@@ -189,23 +242,25 @@ def fetch_news_data(force_refresh=False, pages_per_source=3):
             logger.info(f"新聞數據較舊 ({days_old} 天)，建議更新")
         else:
             logger.info(f"新聞數據過舊 ({days_old} 天)，正在更新...")
+    
     try:
+        # 使用統一新聞爬蟲
+        logger.info("使用統一新聞爬蟲...")
         scraper = NewsScraper()
-        logger.info("開始抓取新聞...")
-        new_df = scraper.scrape_all_news(pages_per_source=pages_per_source)
-        if new_df.empty:
-            logger.warning("沒有抓取到任何新新聞")
-            return existing_df
-        if existing_df is None or existing_df.empty:
-            final_df = new_df
+        news_list = scraper.scrape_all_news(
+            cnyes_limit=15,
+            yahoo_limit=15,
+            cna_limit=10
+        )
+        
+        if news_list:
+            df = pd.DataFrame(news_list)
+            df['scraped_time'] = datetime.now()
+            logger.info(f"統一新聞爬蟲成功獲取 {len(df)} 則新聞")
+            return df
         else:
-            final_df = pd.concat([existing_df, new_df], ignore_index=True)
-            final_df = final_df.drop_duplicates(subset=['title'], keep='first')
-            final_df = final_df.sort_values('scraped_time', ascending=False).reset_index(drop=True)
-        final_df.to_csv(RAW_NEWS_FILE, index=False, encoding='utf-8-sig')
-        logger.info(f"新聞數據已保存到: {RAW_NEWS_FILE}")
-        logger.info(f"總共獲取 {len(final_df)} 則新聞")
-        return final_df
+            logger.warning("統一新聞爬蟲未獲取到任何新聞")
+            return None
     except Exception as e:
         logger.error(f"獲取新聞數據時發生錯誤: {e}")
         return None
@@ -314,13 +369,82 @@ def analyze_stock_sentiment(sentiment_df):
         logger.error(f"分析股票情感時發生錯誤: {e}")
 
 
-def prepare_all_data(force_refresh=False, pages_per_source=3, include_news=True):
+def check_system_status():
+    """檢查系統狀態和數據完整性"""
+    logger.info("🔍 股票選擇系統狀態檢查")
+    
+    # 檢查數據文件
+    logger.info("\n=== 檢查數據文件狀態 ===")
+    
+    data_files = {
+        "股價數據": "data/raw/prices.csv",
+        "新聞數據": "data/raw/news.csv", 
+        "統一新聞": "data/raw/unified_news.csv",
+        "新聞情感分析": "data/processed/news_with_sentiment.csv",
+        "TPEX手動數據": "data/processed/tpex_manual_data.csv"
+    }
+    
+    for name, path in data_files.items():
+        file_path = Path(path)
+        if file_path.exists():
+            try:
+                df = pd.read_csv(file_path)
+                logger.info(f"✅ {name}: {len(df)} 筆數據")
+            except Exception as e:
+                logger.warning(f"❌ {name}: 讀取錯誤 - {str(e)[:50]}")
+        else:
+            logger.warning(f"❌ {name}: 文件不存在")
+    
+    # 檢查模型文件
+    logger.info("\n=== 檢查模型文件狀態 ===")
+    
+    models_dir = Path("outputs/models")
+    model_files = [
+        "feature_columns.pkl",
+        "training_metadata.pkl", 
+        "logistic_regression_model.pkl",
+        "xgboost_classifier_model.pkl",
+        "xgboost_regressor_model.pkl"
+    ]
+    
+    for model_file in model_files:
+        model_path = models_dir / model_file
+        if model_path.exists():
+            size = model_path.stat().st_size
+            logger.info(f"✅ {model_file}: {size} 字節")
+        else:
+            logger.warning(f"❌ {model_file}: 文件不存在")
+    
+    # 檢查核心腳本
+    logger.info("\n=== 檢查核心腳本文件 ===")
+    
+    scripts = [
+        "prepare_data.py",
+        "train.py", 
+        "predict.py",
+        "run_backtest.py",
+        "process_news.py",
+        "process_manual_tpex.py"
+    ]
+    
+    for script in scripts:
+        script_path = Path(script)
+        if script_path.exists():
+            size = script_path.stat().st_size
+            logger.info(f"✅ {script}: {size} 字節")
+        else:
+            logger.warning(f"❌ {script}: 文件不存在")
+    
+    logger.info("\n=== 系統狀態檢查完成 ===")
+
+
+def prepare_all_data(force_refresh=False, pages_per_source=3, include_news=True, use_api=False):
     """準備所有數據"""
     logger.info("=== 開始準備所有數據 ===")
     
     # 步驟1: 獲取股價數據
     logger.info("步驟1: 獲取股價數據...")
-    price_df = fetch_price_data(force_refresh)
+    price_df = fetch_price_data(force_refresh, use_api)
     if price_df is None:
         logger.error("股價數據獲取失敗")
         return False
@@ -349,11 +473,12 @@ def prepare_all_data(force_refresh=False, pages_per_source=3, include_news=True)
 def main():
     """主函數"""
     parser = argparse.ArgumentParser(description='統一數據準備腳本')
-    parser.add_argument('--check', action='store_true', help='只檢查數據狀態，不進行抓取')
+    parser.add_argument('--check', action='store_true', help='檢查系統狀態和數據完整性')
     parser.add_argument('--force', action='store_true', help='強制重新獲取所有數據')
     parser.add_argument('--prices-only', action='store_true', help='只獲取股價數據')
     parser.add_argument('--news-only', action='store_true', help='只獲取新聞數據')
     parser.add_argument('--no-news', action='store_true', help='跳過新聞數據處理')
+    parser.add_argument('--use-api', action='store_true', help='強制使用API獲取股價數據')
     parser.add_argument('--pages', type=int, default=3, help='每個新聞來源抓取的頁數')
     
     args = parser.parse_args()
@@ -361,14 +486,11 @@ def main():
     logger.info("=== 統一數據準備開始 ===")
     
     if args.check:
-        logger.info("檢查數據狀態...")
-        logger.info("\\n=== 股價數據狀態 ===")
-        check_price_data()
-        logger.info("\\n=== 新聞數據狀態 ===")
-        check_news_data()
+        logger.info("=== 系統狀態檢查 ===")
+        check_system_status()
     else:
         if args.prices_only:
-            fetch_price_data(args.force)
+            fetch_price_data(args.force, args.use_api)
         elif args.news_only:
             fetch_news_data(args.force, args.pages)
         else:
@@ -376,7 +498,8 @@ def main():
             prepare_all_data(
                 force_refresh=args.force,
                 pages_per_source=args.pages,
-                include_news=not args.no_news
+                include_news=not args.no_news,
+                use_api=args.use_api
             )
     
     logger.info("=== 統一數據準備結束 ===")

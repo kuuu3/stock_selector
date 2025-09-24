@@ -367,6 +367,7 @@ class UnifiedTrainer:
                         if 'regressor' in model_name:
                             # 回歸模型使用1個月回歸標籤
                             model.fit(features_array, y_regression_1m)
+                            logger.info(f"回歸模型 {model_name} 使用1個月回歸標籤進行增量訓練")
                         else:
                             # 分類模型使用分類標籤
                             model.fit(features_array, y_classification_adjusted)
