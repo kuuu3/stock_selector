@@ -43,6 +43,9 @@ class UnifiedTrainer:
         """完整訓練模式"""
         logger.info("=== 開始完整訓練模式 ===")
         
+        # 記錄完整訓練開始時間
+        full_train_start = time.time()
+        
         # 步驟1: 載入股價數據
         step_start = time.time()
         logger.info("步驟1: 載入股價數據...")
@@ -142,9 +145,9 @@ class UnifiedTrainer:
             features_array = features_clean.values
             # 準備標籤數組：包含分類標籤和回歸標籤
             labels_array = np.column_stack([
-                labels_clean['label_1w'].values,  # 分類標籤
-                labels_clean['future_return_1w'].values,  # 回歸標籤
-                labels_clean['future_return_1w'].values   # 重複作為第三列
+                labels_clean['label_1w'].values,  # 分類標籤 (1週)
+                labels_clean['future_return_1w'].values,  # 回歸標籤 (1週)
+                labels_clean['future_return_1m'].values   # 回歸標籤 (1個月)
             ])
             
             # 訓練模型
@@ -210,7 +213,8 @@ class UnifiedTrainer:
         step_time = time.time() - step_start
         logger.info(f"步驟5完成，耗時: {step_time:.2f}秒")
         
-        total_time = time.time() - (time.time() - step_time)
+        # 計算完整的端到端訓練時間
+        total_time = time.time() - full_train_start
         logger.info(f"=== 完整訓練完成，總耗時: {total_time:.2f}秒 ===")
         return True
     
@@ -343,7 +347,8 @@ class UnifiedTrainer:
             
             # 準備分類和回歸標籤
             y_classification = labels_clean['label_1w'].values
-            y_regression = labels_clean['future_return_1w'].values
+            y_regression_1w = labels_clean['future_return_1w'].values  # 1週回歸標籤
+            y_regression_1m = labels_clean['future_return_1m'].values  # 1個月回歸標籤
             
             # 將分類標籤從 [-1, 0, 1] 轉換為 [0, 1, 2] 以符合 XGBoost 要求
             y_classification_adjusted = y_classification + 1  # [-1, 0, 1] -> [0, 1, 2]
@@ -360,8 +365,8 @@ class UnifiedTrainer:
                     # 根據模型類型使用正確的標籤
                     if hasattr(model, 'fit'):
                         if 'regressor' in model_name:
-                            # 回歸模型使用回歸標籤
-                            model.fit(features_array, y_regression)
+                            # 回歸模型使用1個月回歸標籤
+                            model.fit(features_array, y_regression_1m)
                         else:
                             # 分類模型使用分類標籤
                             model.fit(features_array, y_classification_adjusted)
